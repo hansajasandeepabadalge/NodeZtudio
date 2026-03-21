@@ -17,7 +17,7 @@ const TEXT_COLOR = '#e8ecf0';
 
 // ── Component ──────────────────────────────────────────────
 export default function Playground() {
-    const [activeTool, setActiveTool] = useState<Tool>('draw');
+    const [activeTool, setActiveTool] = useState<Tool>('select');
     const [activeColor, setActiveColor] = useState<string>('#3498db');
     const resetFnRef = useRef<(() => void) | null>(null);
 

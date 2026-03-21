@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createScene, createRenderer, createCamera, DEFAULT_POS, DEFAULT_TARGET, FRUSTUM_SIZE } from '@/engine/core/initScene';
 import { createOrbitControls } from '@/engine/controls/orbitControls';
 import { createGridHelper, createAxisLines } from '@/engine/helpers/gridHelper';
 import { addSceneLighting } from '@/engine/core/lighting';
-import { createHoverHighlight } from '@/features/rendering/hoverHighlight';
-import { createVoxelPlacer } from '@/features/rendering/voxelPlacer';
+import { createVoxelEngine } from '@/features/rendering/voxelEngine';
 import type { Tool } from '@/types/tools';
 
 const LERP_SPEED = 0.05;
@@ -25,24 +25,33 @@ export default function IsometricPlane({
     activeTool  = 'select',
 }: IsometricPlaneProps) {
     const mountRef     = useRef<HTMLDivElement>(null);
-    const highlightRef = useRef<ReturnType<typeof createHoverHighlight> | null>(null);
-    const voxelRef     = useRef<ReturnType<typeof createVoxelPlacer>    | null>(null);
+    const engineRef    = useRef<ReturnType<typeof createVoxelEngine> | null>(null);
     const controlsRef  = useRef<OrbitControls | null>(null);
-    const toolRef      = useRef(activeTool); // readable from inside the animation loop
+    const toolRef      = useRef(activeTool);
 
     // ── Sync active color ──────────────────────────────────
     useEffect(() => {
-        highlightRef.current?.setColor(activeColor);
-        voxelRef.current?.setColor(activeColor);
+        engineRef.current?.setColor(activeColor);
     }, [activeColor]);
 
     // ── Sync active tool ───────────────────────────────────
     useEffect(() => {
         toolRef.current = activeTool;
-        const isDrawing = activeTool === 'draw';
-        // Disable orbit so clicks go to voxelPlacer, not orbit controls
-        if (controlsRef.current) controlsRef.current.enabled = !isDrawing;
-        voxelRef.current?.setActive(isDrawing);
+        if (controlsRef.current) {
+            controlsRef.current.enabled = true; // Always allow pan/zoom
+            if (activeTool === 'select') {
+                controlsRef.current.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+                controlsRef.current.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+                controlsRef.current.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+                controlsRef.current.touches.ONE = THREE.TOUCH.ROTATE;
+            } else {
+                controlsRef.current.mouseButtons.LEFT = null as any;
+                controlsRef.current.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE; // Middle-click rotates
+                controlsRef.current.mouseButtons.RIGHT = THREE.MOUSE.PAN; // Restore right-click to pan
+                controlsRef.current.touches.ONE = null as any;
+            }
+        }
+        engineRef.current?.setMode(activeTool);
     }, [activeTool]);
 
     // ── Scene setup (runs once) ────────────────────────────
@@ -57,15 +66,13 @@ export default function IsometricPlane({
 
         const controls = createOrbitControls(camera, renderer.domElement);
         controlsRef.current = controls;
-        controls.enabled    = toolRef.current !== 'draw';
 
         addSceneLighting(scene);
         scene.add(createGridHelper(GRID_SIZE));
         scene.add(createAxisLines(GRID_SIZE));
 
-        highlightRef.current = createHoverHighlight(scene, camera, renderer.domElement, activeColor);
-        voxelRef.current     = createVoxelPlacer(scene, camera, renderer.domElement, activeColor);
-        voxelRef.current.setActive(toolRef.current === 'draw');
+        engineRef.current = createVoxelEngine(scene, camera, renderer.domElement, activeColor);
+        engineRef.current.setMode(toolRef.current);
 
         // ── Reset animation ────────────────────────────────
         let isResetting = false;
@@ -90,8 +97,7 @@ export default function IsometricPlane({
                     camera.position.copy(DEFAULT_POS);
                     controls.target.copy(DEFAULT_TARGET);
                     isResetting      = false;
-                    // Restore correct orbit state based on current tool
-                    controls.enabled = toolRef.current !== 'draw';
+                    controls.enabled = true;
                 }
             }
 
@@ -116,10 +122,8 @@ export default function IsometricPlane({
         return () => {
             cancelAnimationFrame(animFrameId);
             window.removeEventListener('resize', handleResize);
-            highlightRef.current?.dispose();
-            highlightRef.current = null;
-            voxelRef.current?.dispose();
-            voxelRef.current = null;
+            engineRef.current?.dispose();
+            engineRef.current = null;
             controlsRef.current = null;
             controls.dispose();
             mount.removeChild(renderer.domElement);
