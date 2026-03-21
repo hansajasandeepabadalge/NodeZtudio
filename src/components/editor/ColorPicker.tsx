@@ -73,26 +73,26 @@ export default function ColorPickerButton({
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 style={{
-                position: 'absolute',
-                left: 'calc(100% + 10px)',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'rgba(10, 14, 20, 0.90)',
-                backdropFilter: 'blur(14px)',
-                WebkitBackdropFilter: 'blur(14px)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: '12px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-                padding: '10px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                opacity: isOpen ? 1 : 0,
-                pointerEvents: isOpen ? 'all' : 'none',
-                transition: 'opacity 0.18s ease',
-                zIndex: 10,
-                minWidth: '116px',
-            }}>
+                    position: 'absolute',
+                    left: 'calc(100% + 10px)',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(10, 14, 20, 0.90)',
+                    backdropFilter: 'blur(14px)',
+                    WebkitBackdropFilter: 'blur(14px)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+                    padding: '10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    opacity: isOpen ? 1 : 0,
+                    pointerEvents: isOpen ? 'all' : 'none',
+                    transition: 'opacity 0.18s ease',
+                    zIndex: 10,
+                    minWidth: '116px',
+                }}>
                 {/* Palette grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px' }}>
                     {PALETTE.map(color => (

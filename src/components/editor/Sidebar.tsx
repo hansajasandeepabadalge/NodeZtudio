@@ -1,6 +1,6 @@
 'use client';
 
-import ColorPickerButton from '@/components/colorPicker';
+import ColorPickerButton from '@/components/editor/ColorPicker';
 
 // ── Types ──────────────────────────────────────────────────
 export type Tool = 'select' | 'draw' | 'erase' | 'fill';
@@ -11,8 +11,6 @@ export interface ToolDef {
     key: string;
     icon: React.ReactNode;
 }
-
-
 
 // ── Icons ──────────────────────────────────────────────────
 const CursorIcon = () => (
@@ -155,5 +153,3 @@ function SidebarBtn({ children, active, onClick, title }: {
         </button>
     );
 }
-
-

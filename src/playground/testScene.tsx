@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useCallback, useState } from 'react';
-import IsometricPlane from '@/components/plane';
-import Sidebar, { TOOLS, type Tool } from '@/components/sideBar';
+import IsometricPlane from '@/features/rendering/IsometricPlane';
+import Sidebar, { TOOLS, type Tool } from '@/components/editor/Sidebar';
 
 // ── Style tokens ───────────────────────────────────────────
 const GLASS: React.CSSProperties = {
