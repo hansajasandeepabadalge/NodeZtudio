@@ -70,8 +70,15 @@ export function createVoxelEngine(
         return `${x},${y},${z}`;
     }
 
-    /** Returns the world position for the block to interact with, depending on current mode */
-    function getInteractionTarget(event: MouseEvent): THREE.Vector3 | null {
+    interface HitTargets {
+        /** The cell where a new block should be placed */
+        place: THREE.Vector3 | null;
+        /** The cell of the existing block that was hit (or null if floor/air) */
+        hitBlock: THREE.Vector3 | null;
+    }
+
+    /** Returns both the target for placing a new block and the specific block being hit (if any) */
+    function getTargets(event: MouseEvent): HitTargets {
         const rect = domElement.getBoundingClientRect();
         mouseNDC.x =  ((event.clientX - rect.left) / rect.width)  * 2 - 1;
         mouseNDC.y = -((event.clientY - rect.top)  / rect.height) * 2 + 1;
@@ -82,34 +89,36 @@ export function createVoxelEngine(
         const objects = [floorMesh, ...voxels.values()];
         const hits = raycaster.intersectObjects(objects);
 
-        if (hits.length > 0) {
-            const hit = hits[0];
-            
-            if (currentMode === 'select' || currentMode === 'erase') {
-                // Return the existing block's exact position (ignore floor)
-                if (hit.object !== floorMesh) {
-                    return hit.object.position.clone();
-                }
-                return null;
-            }
-
-            // Draw mode: target the EMPTY cell adjacent to the hit face
-            const normal = hit.face?.normal.clone() || new THREE.Vector3(0, 1, 0);
-            if (hit.object === floorMesh) normal.set(0, 1, 0);
-
-            const pos = hit.point.clone().add(normal.multiplyScalar(0.5));
-
-            // Snap to grid
-            const cellX = Math.floor(pos.x) + 0.5;
-            const cellY = Math.floor(pos.y) + 0.5;
-            const cellZ = Math.floor(pos.z) + 0.5;
-
-            // Enforce bounds (xz), allow stacking up to an arbitrary reasonable height
-            if (Math.abs(cellX) <= HALF_GRID && Math.abs(cellZ) <= HALF_GRID && cellY > 0) {
-                return new THREE.Vector3(cellX, cellY, cellZ);
-            }
+        if (hits.length === 0) {
+            return { place: null, hitBlock: null };
         }
-        return null;
+
+        const hit = hits[0];
+        const isFloor = hit.object === floorMesh;
+
+        // Calculate the hit block (the one we are looking at)
+        let hitBlock: THREE.Vector3 | null = null;
+        if (!isFloor) {
+            hitBlock = hit.object.position.clone();
+        }
+        
+        // Calculate the place target (adjacent cell)
+        const normal = hit.face?.normal.clone() || new THREE.Vector3(0, 1, 0);
+        if (isFloor) normal.set(0, 1, 0);
+
+        const pos = hit.point.clone().add(normal.multiplyScalar(0.5));
+
+        // Snap to grid
+        const cellX = Math.floor(pos.x) + 0.5;
+        const cellY = Math.floor(pos.y) + 0.5;
+        const cellZ = Math.floor(pos.z) + 0.5;
+
+        let place: THREE.Vector3 | null = null;
+        if (Math.abs(cellX) <= HALF_GRID && Math.abs(cellZ) <= HALF_GRID && cellY > 0) {
+            place = new THREE.Vector3(cellX, cellY, cellZ);
+        }
+
+        return { place, hitBlock };
     }
 
     // ── Interaction Handlers ─────────────────────────────────
@@ -121,15 +130,35 @@ export function createVoxelEngine(
             return;
         }
 
-        const target = getInteractionTarget(event);
-        if (target) {
-            hoverMesh.position.copy(target);
-            edgeLines.position.copy(target);
-            hoverMesh.visible = true;
-            edgeLines.visible = true;
-        } else {
-            hoverMesh.visible = false;
-            edgeLines.visible = false;
+        const { place, hitBlock } = getTargets(event);
+
+        if (currentMode === 'select') {
+            // Select mode: only show highlight on hit block
+            if (hitBlock) {
+                hoverMesh.position.copy(hitBlock);
+                edgeLines.position.copy(hitBlock);
+                hoverMesh.visible = true;
+                edgeLines.visible = true;
+            } else {
+                hoverMesh.visible = false;
+                edgeLines.visible = false;
+            }
+        } else if (currentMode === 'draw') {
+            // Draw mode: Outline the hit block (or place target if floor), fill the place target
+            if (place) {
+                hoverMesh.position.copy(place);
+                hoverMesh.visible = true;
+
+                if (hitBlock) {
+                    edgeLines.position.copy(hitBlock); // Outline the block we are looking at (deletable)
+                } else {
+                    edgeLines.position.copy(place);    // Outline the floor slot
+                }
+                edgeLines.visible = true;
+            } else {
+                hoverMesh.visible = false;
+                edgeLines.visible = false;
+            }
         }
     }
 
@@ -139,36 +168,53 @@ export function createVoxelEngine(
     }
 
     function onMouseDown(event: MouseEvent) {
-        if (currentMode !== 'draw' || event.button !== 0) return;
+        if (currentMode !== 'draw') return;
 
-        const target = getInteractionTarget(event);
-        if (target) {
-            const key = cellKey(target.x, target.y, target.z);
+        const { place, hitBlock } = getTargets(event);
 
-            // If a block somehow already exists there, remove it
-            const existing = voxels.get(key);
-            if (existing) {
-                scene.remove(existing);
-                existing.geometry.dispose();
-                (existing.material as THREE.Material).dispose();
+        if (event.button === 0) {
+            // Left click = Place block
+            if (place) {
+                const key = cellKey(place.x, place.y, place.z);
+
+                const existing = voxels.get(key);
+                if (existing) {
+                    scene.remove(existing);
+                    existing.geometry.dispose();
+                    (existing.material as THREE.Material).dispose();
+                }
+
+                const geo  = new THREE.BoxGeometry(1, 1, 1);
+                const mat  = new THREE.MeshLambertMaterial({ color: new THREE.Color(currentColor) });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.copy(place);
+                scene.add(mesh);
+                voxels.set(key, mesh);
+
+                onMouseMove(event);
             }
+        } else if (event.button === 2) {
+            // Right click = Delete block
+            if (hitBlock) {
+                const key = cellKey(hitBlock.x, hitBlock.y, hitBlock.z);
+                const existing = voxels.get(key);
+                if (existing) {
+                    scene.remove(existing);
+                    existing.geometry.dispose();
+                    (existing.material as THREE.Material).dispose();
+                    voxels.delete(key);
 
-            // Place new solid block
-            const geo  = new THREE.BoxGeometry(1, 1, 1);
-            const mat  = new THREE.MeshLambertMaterial({ color: new THREE.Color(currentColor) });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.copy(target);
-            scene.add(mesh);
-            voxels.set(key, mesh);
-
-            // Re-trigger hover update since the layout changed under the mouse
-            onMouseMove(event);
+                    onMouseMove(event);
+                }
+            }
         }
     }
 
     domElement.addEventListener('mousemove', onMouseMove);
     domElement.addEventListener('mouseleave', onMouseLeave);
     domElement.addEventListener('mousedown', onMouseDown);
+    // Prevent context menu from popping up on right click
+    domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // ── Public API ───────────────────────────────────────────
     return {

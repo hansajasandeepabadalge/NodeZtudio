@@ -21,7 +21,7 @@ interface IsometricPlaneProps {
 
 export default function IsometricPlane({
     onResetReady,
-    activeColor = '#00b4ff',
+    activeColor = '#795548',
     activeTool  = 'select',
 }: IsometricPlaneProps) {
     const mountRef     = useRef<HTMLDivElement>(null);
@@ -47,7 +47,7 @@ export default function IsometricPlane({
             } else {
                 controlsRef.current.mouseButtons.LEFT = null as any;
                 controlsRef.current.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE; // Middle-click rotates
-                controlsRef.current.mouseButtons.RIGHT = THREE.MOUSE.PAN; // Restore right-click to pan
+                controlsRef.current.mouseButtons.RIGHT = null as any; // Right-click unmapped (used for deleting)
                 controlsRef.current.touches.ONE = null as any;
             }
         }
