@@ -54,7 +54,7 @@ export function createVoxelEngine(
     scene.add(hoverMesh);
 
     const edgeMat = new THREE.LineBasicMaterial({
-        color: new THREE.Color(initialColor),
+        color: 0xffffff,
         opacity: 0.85,
         transparent: true,
     });
@@ -222,7 +222,6 @@ export function createVoxelEngine(
             currentColor = hex;
             const c = new THREE.Color(hex);
             hoverMat.color.copy(c);
-            edgeMat.color.copy(c);
         },
         setMode(mode: 'draw' | 'erase' | 'select' | 'fill') {
             currentMode = mode;
