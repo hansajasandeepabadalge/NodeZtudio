@@ -1,16 +1,8 @@
 'use client';
 
 import ColorPickerButton from '@/components/editor/ColorPicker';
-
-// ── Types ──────────────────────────────────────────────────
-export type Tool = 'select' | 'draw' | 'erase' | 'fill';
-
-export interface ToolDef {
-    id: Tool;
-    label: string;
-    key: string;
-    icon: React.ReactNode;
-}
+import { GLASS, TEXT_COLOR, ACCENT } from '@/utils/constants';
+import type { Tool, ToolDef } from '@/types/tools';
 
 // ── Icons ──────────────────────────────────────────────────
 const CursorIcon = () => (
@@ -48,18 +40,6 @@ export const TOOLS: ToolDef[] = [
     { id: 'fill',   label: 'Fill',   key: 'F', icon: <FillIcon /> },
 ];
 
-// ── Style tokens ───────────────────────────────────────────
-const GLASS: React.CSSProperties = {
-    background: 'rgba(10, 14, 20, 0.72)',
-    backdropFilter: 'blur(14px)',
-    WebkitBackdropFilter: 'blur(14px)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '14px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
-};
-const TEXT_COLOR = '#e8ecf0';
-const ACCENT = '#00b4ff';
-
 // ── Sidebar Props ──────────────────────────────────────────
 interface SidebarProps {
     activeTool: Tool;
@@ -85,7 +65,6 @@ export default function Sidebar({
             padding: '10px',
             ...GLASS,
         }}>
-            {/* Tool buttons */}
             {TOOLS.map(tool => (
                 <SidebarBtn
                     key={tool.id}
@@ -99,15 +78,10 @@ export default function Sidebar({
 
             <SidebarDivider />
 
-            {/* Compact color picker — hover to reveal flyout */}
-            <ColorPickerButton
-                activeColor={activeColor}
-                onColorChange={onColorChange}
-            />
+            <ColorPickerButton activeColor={activeColor} onColorChange={onColorChange} />
 
             <SidebarDivider />
 
-            {/* Isometric reset button */}
             <SidebarBtn onClick={onResetView} title="Reset to isometric view">
                 <IsoIcon />
             </SidebarBtn>
@@ -142,14 +116,17 @@ function SidebarBtn({ children, active, onClick, title }: {
                 transition: 'all 0.15s',
                 outline: 'none',
             }}
-            onMouseEnter={event => {
-                if (!active) (event.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.10)';
+            onMouseEnter={e => {
+                if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.10)';
             }}
-            onMouseLeave={event => {
-                if (!active) (event.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
+            onMouseLeave={e => {
+                if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
             }}
         >
             {children}
         </button>
     );
 }
+
+// Re-export types for consumers that import from this module
+export type { Tool, ToolDef };

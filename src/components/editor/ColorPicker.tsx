@@ -1,16 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-
-// ── Palette colors ─────────────────────────────────────────
-export const PALETTE = [
-    '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71',
-    '#1abc9c', '#3498db', '#9b59b6', '#e91e63',
-    '#ffffff', '#bdc3c7', '#7f8c8d', '#2c3e50',
-    '#795548', '#ff7043', '#26c6da', '#66bb6a',
-];
-
-const TEXT_COLOR = '#e8ecf0';
+import { PALETTE, TEXT_COLOR } from '@/utils/constants';
 
 // ── Props ──────────────────────────────────────────────────
 interface ColorPickerButtonProps {
@@ -130,7 +121,7 @@ export default function ColorPickerButton({
                 <input
                     type="color"
                     value={activeColor}
-                    onChange={event => onColorChange(event.target.value)}
+                    onChange={e => onColorChange(e.target.value)}
                     title="Custom color"
                     style={{
                         width: '100%', height: '26px',
