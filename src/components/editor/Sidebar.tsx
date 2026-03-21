@@ -35,9 +35,9 @@ const IsoIcon = () => (
 
 export const TOOLS: ToolDef[] = [
     { id: 'select', label: 'Select', key: 'V', icon: <CursorIcon /> },
-    { id: 'draw',   label: 'Draw',   key: 'B', icon: <PencilIcon /> },
-    { id: 'erase',  label: 'Erase',  key: 'E', icon: <EraserIcon /> },
-    { id: 'fill',   label: 'Fill',   key: 'F', icon: <FillIcon /> },
+    { id: 'draw', label: 'Draw', key: 'B', icon: <PencilIcon /> },
+    { id: 'erase', label: 'Erase', key: 'E', icon: <EraserIcon /> },
+    { id: 'fill', label: 'Fill', key: 'F', icon: <FillIcon /> },
 ];
 
 // ── Sidebar Props ──────────────────────────────────────────
