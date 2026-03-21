@@ -34,7 +34,11 @@ export default function Playground() {
 
             {/* 3D Viewport */}
             <div style={{ position: 'absolute', inset: 0 }}>
-                <IsometricPlane onResetReady={handleResetReady} activeColor={activeColor} />
+                <IsometricPlane
+                    onResetReady={handleResetReady}
+                    activeColor={activeColor}
+                    activeTool={activeTool}
+                />
             </div>
 
             {/* Left Sidebar */}
