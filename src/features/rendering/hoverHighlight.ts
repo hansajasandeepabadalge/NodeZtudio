@@ -34,7 +34,7 @@ export function createHoverHighlight(
     scene.add(floorMesh);
 
     // ── Hover cube ──────────────────────────────────────────
-    const boxGeo = new THREE.BoxGeometry(0.96, 1, 0.96);
+    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
     const fillMat = new THREE.MeshBasicMaterial({
         color: new THREE.Color(initialColor),

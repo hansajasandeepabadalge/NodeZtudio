@@ -5,6 +5,7 @@ import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js
 import { createScene, createRenderer, createCamera, DEFAULT_POS, DEFAULT_TARGET, FRUSTUM_SIZE } from '@/engine/core/initScene';
 import { createOrbitControls } from '@/engine/controls/orbitControls';
 import { createGridHelper, createAxisLines } from '@/engine/helpers/gridHelper';
+import { addSceneLighting } from '@/engine/core/lighting';
 import { createHoverHighlight } from '@/features/rendering/hoverHighlight';
 import { createVoxelPlacer } from '@/features/rendering/voxelPlacer';
 import type { Tool } from '@/types/tools';
@@ -58,6 +59,7 @@ export default function IsometricPlane({
         controlsRef.current = controls;
         controls.enabled    = toolRef.current !== 'draw';
 
+        addSceneLighting(scene);
         scene.add(createGridHelper(GRID_SIZE));
         scene.add(createAxisLines(GRID_SIZE));
 

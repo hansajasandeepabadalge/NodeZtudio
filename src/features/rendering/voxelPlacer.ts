@@ -58,8 +58,8 @@ export function createVoxelPlacer(
             voxels.delete(key);
         }
 
-        const geo  = new THREE.BoxGeometry(0.96, 1, 0.96);
-        const mat  = new THREE.MeshBasicMaterial({ color: new THREE.Color(currentColor) });
+        const geo  = new THREE.BoxGeometry(1, 1, 1);
+        const mat  = new THREE.MeshLambertMaterial({ color: new THREE.Color(currentColor) });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(cellX, 0.5, cellZ);
         scene.add(mesh);
