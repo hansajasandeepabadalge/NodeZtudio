@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 
-export const FRUSTUM_SIZE = 20;
-export const DEFAULT_POS  = new THREE.Vector3(20, 20, 20);
+export const FRUSTUM_SIZE  = 20;
+export const DEFAULT_ZOOM  = 1;
+export const DEFAULT_POS   = new THREE.Vector3(20, 20, 20);
 export const DEFAULT_TARGET = new THREE.Vector3(0, 0, 0);
 
 /** Creates and returns a configured Three.js Scene. */

@@ -11,15 +11,15 @@ import * as THREE from 'three';
  *               back faces from black
  */
 export function addSceneLighting(scene: THREE.Scene): void {
-    // Soft ambient — base brightness
-    const ambient = new THREE.AmbientLight(0xffffff, 0.45);
+    // Strong ambient — ensures the chosen color is always clearly visible on all faces
+    const ambient = new THREE.AmbientLight(0xffffff, 1.2);
 
     // Main sun — angled from above-right matching the isometric camera position
-    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
     sun.position.set(10, 20, 15);
 
-    // Cool fill from below-left — makes back/bottom faces visibly darker but not black
-    const fill = new THREE.DirectionalLight(0x8899cc, 0.25);
+    // Cool fill from below-left — subtle face separation without heavy darkening
+    const fill = new THREE.DirectionalLight(0x99aadd, 0.4);
     fill.position.set(-10, 5, -10);
 
     scene.add(ambient, sun, fill);

@@ -1,17 +1,24 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createScene, createRenderer, createCamera, DEFAULT_POS, DEFAULT_TARGET, FRUSTUM_SIZE } from '@/engine/core/initScene';
+import { createScene, createRenderer, createCamera, DEFAULT_POS, DEFAULT_TARGET, DEFAULT_ZOOM, FRUSTUM_SIZE } from '@/engine/core/initScene';
 import { createOrbitControls } from '@/engine/controls/orbitControls';
 import { createGridHelper, createAxisLines } from '@/engine/helpers/gridHelper';
 import { addSceneLighting } from '@/engine/core/lighting';
 import { createVoxelEngine } from '@/features/rendering/voxelEngine';
+import type { VoxelData } from '@/features/rendering/voxelEngine';
 import type { Tool } from '@/types/tools';
 
 const LERP_SPEED = 0.05;
 const GRID_SIZE  = 20;
+
+export interface IsometricPlaneHandle {
+    exportScene(): VoxelData[];
+    importScene(data: VoxelData[]): void;
+    clearScene(): void;
+}
 
 interface IsometricPlaneProps {
     onResetReady?: (reset: () => void) => void;
@@ -19,15 +26,22 @@ interface IsometricPlaneProps {
     activeTool?: Tool;
 }
 
-export default function IsometricPlane({
+const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(function IsometricPlane({
     onResetReady,
     activeColor = '#795548',
     activeTool  = 'select',
-}: IsometricPlaneProps) {
+}, ref) {
     const mountRef     = useRef<HTMLDivElement>(null);
     const engineRef    = useRef<ReturnType<typeof createVoxelEngine> | null>(null);
     const controlsRef  = useRef<OrbitControls | null>(null);
     const toolRef      = useRef(activeTool);
+
+    // ── Expose save/load API to parent ─────────────────────
+    useImperativeHandle(ref, () => ({
+        exportScene: () => engineRef.current?.exportScene() ?? [],
+        importScene: (data) => engineRef.current?.importScene(data),
+        clearScene:  () => engineRef.current?.clearScene(),
+    }));
 
     // ── Sync active color ──────────────────────────────────
     useEffect(() => {
@@ -90,12 +104,17 @@ export default function IsometricPlane({
             if (isResetting) {
                 camera.position.lerp(DEFAULT_POS, LERP_SPEED);
                 controls.target.lerp(DEFAULT_TARGET, LERP_SPEED);
+                camera.zoom += (DEFAULT_ZOOM - camera.zoom) * LERP_SPEED * 3;
+                camera.updateProjectionMatrix();
                 if (
                     camera.position.distanceTo(DEFAULT_POS)    < 0.01 &&
-                    controls.target.distanceTo(DEFAULT_TARGET) < 0.01
+                    controls.target.distanceTo(DEFAULT_TARGET) < 0.01 &&
+                    Math.abs(camera.zoom - DEFAULT_ZOOM)       < 0.001
                 ) {
                     camera.position.copy(DEFAULT_POS);
                     controls.target.copy(DEFAULT_TARGET);
+                    camera.zoom = DEFAULT_ZOOM;
+                    camera.updateProjectionMatrix();
                     isResetting      = false;
                     controls.enabled = true;
                 }
@@ -133,4 +152,6 @@ export default function IsometricPlane({
     }, []);
 
     return <div ref={mountRef} style={{ width: '100%', height: '100%' }} />;
-}
+});
+
+export default IsometricPlane;
