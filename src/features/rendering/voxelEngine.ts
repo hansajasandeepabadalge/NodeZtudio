@@ -11,9 +11,19 @@ import * as THREE from 'three';
 const GRID_SIZE = 20;
 const HALF_GRID = GRID_SIZE / 2;
 
+export interface VoxelData {
+    x: number;
+    y: number;
+    z: number;
+    color: string;
+}
+
 export interface VoxelEngine {
     setColor(hex: string): void;
     setMode(mode: 'draw' | 'erase' | 'select' | 'fill'): void;
+    exportScene(): VoxelData[];
+    importScene(data: VoxelData[]): void;
+    clearScene(): void;
     dispose(): void;
 }
 
@@ -272,6 +282,47 @@ export function createVoxelEngine(
             eraseHoverMesh.visible = false;
             eraseEdgeLines.visible = false;
         },
+
+        exportScene(): VoxelData[] {
+            const result: VoxelData[] = [];
+            voxels.forEach((mesh, key) => {
+                const [x, y, z] = key.split(',').map(Number);
+                const mat = mesh.material as THREE.MeshLambertMaterial;
+                result.push({ x, y, z, color: '#' + mat.color.getHexString() });
+            });
+            return result;
+        },
+
+        importScene(data: VoxelData[]) {
+            // Clear existing
+            voxels.forEach(mesh => {
+                scene.remove(mesh);
+                mesh.geometry.dispose();
+                (mesh.material as THREE.Material).dispose();
+            });
+            voxels.clear();
+
+            // Rebuild
+            data.forEach(({ x, y, z, color }) => {
+                const key = cellKey(x, y, z);
+                const geo  = new THREE.BoxGeometry(1, 1, 1);
+                const mat  = new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y, z);
+                scene.add(mesh);
+                voxels.set(key, mesh);
+            });
+        },
+
+        clearScene() {
+            voxels.forEach(mesh => {
+                scene.remove(mesh);
+                mesh.geometry.dispose();
+                (mesh.material as THREE.Material).dispose();
+            });
+            voxels.clear();
+        },
+
         dispose() {
             domElement.removeEventListener('mousemove', onMouseMove);
             domElement.removeEventListener('mouseleave', onMouseLeave);
