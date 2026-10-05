@@ -12,7 +12,20 @@ export const BLOCKS = [
 ] as const;
 
 export type BlockType = typeof BLOCKS[number]['id'];
-export type TextureKind = 'grass-top' | 'grass-side' | 'dirt' | 'stone' | 'sand' | 'bark' | 'rings' | 'planks';
+
+/** Public assets shared by the scene materials and the block picker. */
+export const BLOCK_TEXTURE_URLS = {
+    grass_block_top: '/textures/grass_block_top.png',
+    grass_block_side: '/textures/grass_block_side.png',
+    dirt: '/textures/dirt.png',
+    stone: '/textures/stone.png',
+    sand: '/textures/sand.png',
+    log_oak: '/textures/log_oak.png',
+    log_oak_top: '/textures/log_oak_top.png',
+    planks_oak: '/textures/planks_oak.png',
+} as const;
+
+export type TextureKind = keyof typeof BLOCK_TEXTURE_URLS;
 
 export interface BlockEmission {
     color: string;
@@ -29,12 +42,8 @@ const LEGACY_LIGHT_COLORS = {
     'portal-light': '#ffc5ff',
 };
 
-export function isLightBlock(type: string): type is 'glow' {
-    return type === 'glow';
-}
-
 export function blockEmission(type: BlockType, color = DEFAULT_GLOW_COLOR): BlockEmission | undefined {
-    return isLightBlock(type) ? { color, intensity: 3, range: 4, emissiveIntensity: 1.6 } : undefined;
+    return type === 'glow' ? { color, intensity: 3, range: 4, emissiveIntensity: 1.6 } : undefined;
 }
 
 export interface VoxelData {
@@ -49,50 +58,23 @@ export function isBlockType(value: unknown): value is BlockType {
     return BLOCKS.some(block => block.id === value);
 }
 
-/** BoxGeometry order: right, left, top, bottom, front, back. */
-export function blockFaces(type: Exclude<BlockType, 'custom' | 'glow'>): TextureKind[] {
-    switch (type) {
-        case 'grass': return ['grass-side', 'grass-side', 'grass-top', 'dirt', 'grass-side', 'grass-side'];
-        case 'log': return ['bark', 'bark', 'rings', 'rings', 'bark', 'bark'];
-        default: return Array<TextureKind>(6).fill(type);
-    }
-}
-
-const TEXTURE_PALETTES: Record<TextureKind, readonly string[]> = {
-    'grass-top': ['#648b38', '#749947', '#557b30', '#88a853'],
-    'grass-side': ['#896344', '#a17b55', '#735035', '#b18c64'],
-    dirt: ['#896344', '#a17b55', '#735035', '#b18c64'],
-    stone: ['#92958c', '#a3a59d', '#7d8179', '#b3b5ad'],
-    sand: ['#d8c58d', '#e3d29e', '#c5b27d', '#ecddb0'],
-    bark: ['#705038', '#856141', '#533d2b', '#98744d'],
-    rings: ['#b38b55', '#c9a56e', '#8f683f', '#d9b881'],
-    planks: ['#b38b55', '#c19a64', '#8b663e', '#cfaa75'],
+const BLOCK_FACE_TEXTURES: Record<Exclude<BlockType, 'custom' | 'glow'>, {
+    side: TextureKind;
+    top?: TextureKind;
+    bottom?: TextureKind;
+}> = {
+    grass: { side: 'grass_block_side', top: 'grass_block_top', bottom: 'dirt' },
+    log: { side: 'log_oak', top: 'log_oak_top' },
+    planks: { side: 'planks_oak' },
+    dirt: { side: 'dirt' },
+    stone: { side: 'stone' },
+    sand: { side: 'sand' },
 };
 
-/** Original, deterministic 16px textures, shared by the renderer and block picker. */
-export function blockTexturePixels(kind: TextureKind): Uint8Array {
-    const pixels = new Uint8Array(16 * 16 * 4);
-    for (let y = 0; y < 16; y++) {
-        for (let x = 0; x < 16; x++) {
-            const hash = ((x * 374761393 + y * 668265263 + 1274126177) ^ (x * y * 1013)) >>> 0;
-            let palette = TEXTURE_PALETTES[kind];
-            let shade = (hash >>> 8) % 4;
-            if (kind === 'grass-side' && y < 3 + (x % 3)) palette = TEXTURE_PALETTES['grass-top'];
-            if (kind === 'bark') shade = x % 4 === 0 ? 2 : (x + Math.floor(y / 5)) % 4;
-            if (kind === 'rings') shade = Math.floor(Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5))) % 3;
-            if (kind === 'planks') {
-                const seam = y % 4 === 0 || (x === (Math.floor(y / 4) % 2 === 0 ? 4 : 12));
-                shade = seam ? 2 : (hash >>> 8) % 2;
-            }
-            const rgb = Number.parseInt(palette[shade].slice(1), 16);
-            const offset = (y * 16 + x) * 4;
-            pixels[offset] = (rgb >>> 16) & 255;
-            pixels[offset + 1] = (rgb >>> 8) & 255;
-            pixels[offset + 2] = rgb & 255;
-            pixels[offset + 3] = 255;
-        }
-    }
-    return pixels;
+/** BoxGeometry order: right, left, top, bottom, front, back. Bottom defaults to top. */
+export function blockFaces(type: Exclude<BlockType, 'custom' | 'glow'>): TextureKind[] {
+    const { side, top = side, bottom = top } = BLOCK_FACE_TEXTURES[type];
+    return [side, side, top, bottom, side, side];
 }
 
 /** Validate before replacing a scene, retaining support for old solid-color saves. */

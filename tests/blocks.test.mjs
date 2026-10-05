@@ -1,8 +1,8 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import * as THREE from 'three';
-import { BLOCKS, blockFaces, blockTexturePixels, blockEmission } from '../src/features/voxel/blocks.ts';
+import { BLOCKS, blockFaces, blockEmission } from '../src/features/voxel/blocks.ts';
 
 // Node's native TS runner needs the same aliases as the application bundler.
 registerHooks({
@@ -20,6 +20,9 @@ registerHooks({
 const { createVoxelEngine } = await import('../src/features/rendering/voxelEngine.ts');
 const { createBlockMaterials } = await import('../src/features/rendering/blockMaterials.ts');
 const { MAX_BLOCK_LIGHTS } = await import('../src/features/rendering/blockLights.ts');
+
+// Image loading requires a browser; retain the requested URL for material assertions.
+mock.method(THREE.TextureLoader.prototype, 'load', url => new THREE.Texture({ src: url }));
 
 function setup(onHistoryChange) {
     const scene = new THREE.Scene();
@@ -39,16 +42,12 @@ function setup(onHistoryChange) {
 }
 
 test('grass and logs have the correct top, side, and bottom textures', () => {
-    assert.equal(blockFaces('grass')[2], 'grass-top');
+    assert.equal(blockFaces('grass')[2], 'grass_block_top');
     assert.equal(blockFaces('grass')[3], 'dirt');
-    assert.equal(blockFaces('grass')[0], 'grass-side');
-    assert.equal(blockFaces('log')[2], 'rings');
-    assert.equal(blockFaces('log')[3], 'rings');
-    assert.equal(blockFaces('log')[4], 'bark');
-    const pixels = blockTexturePixels('grass-side');
-    assert.ok(pixels[1] > pixels[0], 'top edge should be green');
-    const bottom = (15 * 16) * 4;
-    assert.ok(pixels[bottom] > pixels[bottom + 1], 'bottom edge should be brown');
+    assert.equal(blockFaces('grass')[0], 'grass_block_side');
+    assert.equal(blockFaces('log')[2], 'log_oak_top');
+    assert.equal(blockFaces('log')[3], 'log_oak_top');
+    assert.equal(blockFaces('log')[4], 'log_oak');
 });
 
 test('typed and legacy solid-color blocks survive JSON save/load', () => {
@@ -102,6 +101,20 @@ test('block materials are reused and textures are released once on disposal', ()
     assert.equal(first[0], second[0]);
     assert.equal(first[0].map.magFilter, THREE.NearestFilter);
     assert.equal(first[0].map.flipY, true, 'grass fringe must appear at the top');
+    assert.deepEqual(first.map(material => material.map.image.src), [
+        '/textures/grass_block_side.png', '/textures/grass_block_side.png',
+        '/textures/grass_block_top.png', '/textures/dirt.png',
+        '/textures/grass_block_side.png', '/textures/grass_block_side.png',
+    ]);
+    for (const type of ['dirt', 'stone', 'sand']) {
+        assert.equal(library.get(type, '#ffffff')[0].map.image.src, `/textures/${type}.png`);
+    }
+    assert.deepEqual(library.get('log', '#ffffff').map(material => material.map.image.src), [
+        '/textures/log_oak.png', '/textures/log_oak.png',
+        '/textures/log_oak_top.png', '/textures/log_oak_top.png',
+        '/textures/log_oak.png', '/textures/log_oak.png',
+    ]);
+    assert.ok(library.get('planks', '#ffffff').every(material => material.map.image.src === '/textures/planks_oak.png'));
     let disposed = 0;
     const textures = new Set(first.map(material => material.map));
     textures.forEach(texture => texture.addEventListener('dispose', () => disposed++));

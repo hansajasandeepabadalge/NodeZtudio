@@ -1,31 +1,13 @@
 'use client';
 
 import { memo } from 'react';
-import { BLOCKS, blockFaces, blockTexturePixels, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
+import { BLOCKS, BLOCK_TEXTURE_URLS, blockFaces, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
 import { GLASS, TEXT_COLOR } from '@/utils/constants';
 
-const pixelPaths = new Map<TextureKind, [string, string][]>();
-
-function texturePaths(kind: TextureKind): [string, string][] {
-    const cached = pixelPaths.get(kind);
-    if (cached) return cached;
-    const pixels = blockTexturePixels(kind);
-    const groups = new Map<string, string>();
-    for (let y = 0; y < 16; y++) {
-        for (let x = 0; x < 16; x++) {
-            const offset = (y * 16 + x) * 4;
-            const color = `rgb(${pixels[offset]},${pixels[offset + 1]},${pixels[offset + 2]})`;
-            groups.set(color, (groups.get(color) ?? '') + `M${x} ${y}h1v1h-1z`);
-        }
-    }
-    const result = [...groups];
-    pixelPaths.set(kind, result);
-    return result;
-}
-
 function Face({ kind, color }: { kind?: TextureKind; color: string }) {
-    return kind ? texturePaths(kind).map(([fill, d]) => <path key={fill} fill={fill} d={d} />)
-        : <path fill={color} d="M0 0h16v16H0z" />;
+    const url = kind && BLOCK_TEXTURE_URLS[kind];
+    if (url) return <image href={url} width="16" height="16" preserveAspectRatio="none" style={{ imageRendering: 'pixelated' }} />;
+    return <path fill={color} d="M0 0h16v16H0z" />;
 }
 
 function BlockPreview({ type, color }: { type: BlockType; color: string }) {
