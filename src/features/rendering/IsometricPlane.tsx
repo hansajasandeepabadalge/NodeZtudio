@@ -7,35 +7,43 @@ import { createScene, createRenderer, createCamera, DEFAULT_POS, DEFAULT_TARGET,
 import { createOrbitControls } from '@/engine/controls/orbitControls';
 import { createGridHelper, createAxisLines } from '@/engine/helpers/gridHelper';
 import { addSceneLighting } from '@/engine/core/lighting';
-import { createVoxelEngine } from '@/features/rendering/voxelEngine';
+import {createVoxelEngine, HistoryState} from '@/features/rendering/voxelEngine';
 import type { VoxelData } from '@/features/rendering/voxelEngine';
 import type { Tool } from '@/types/tools';
 import { DEFAULT_COLOR } from '@/utils/constants';
+import type { BlockType } from '@/features/voxel/blocks';
 import { advanceTime, DEFAULT_LIGHTING, type LightingSettings } from './dayNight';
+import { createPostProcessing } from './postProcessing';
 
 const LERP_SPEED = 0.05;
-const GRID_SIZE  = 20;
+const GRID_SIZE  = 30;
 
 export interface IsometricPlaneHandle {
     exportScene(): VoxelData[];
     importScene(data: VoxelData[]): void;
     clearScene(): void;
+    undo(): void;
+    redo(): void;
 }
 
 interface IsometricPlaneProps {
     onResetReady?: (reset: () => void) => void;
     activeColor?: string;
     activeTool?: Tool;
+    activeBlock?: BlockType;
     lighting?: LightingSettings;
     onTimeChange?: (time: number) => void;
+    onHistoryChange?: (state: HistoryState) => void;
 }
 
 const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(function IsometricPlane({
     onResetReady,
     activeColor = DEFAULT_COLOR,
     activeTool  = 'select',
+    activeBlock = 'custom',
     lighting = DEFAULT_LIGHTING,
     onTimeChange,
+    onHistoryChange,
 }, ref) {
     const mountRef     = useRef<HTMLDivElement>(null);
     const engineRef    = useRef<ReturnType<typeof createVoxelEngine> | null>(null);
@@ -44,6 +52,12 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
     const lightingRef = useRef(lighting);
     const timeRef = useRef(lighting.time);
     const onTimeChangeRef = useRef(onTimeChange);
+
+    const onHistoryChangeRef = useRef(onHistoryChange);
+
+    useEffect(() => {
+        onHistoryChangeRef.current = onHistoryChange;
+    }, [onHistoryChange]);
 
     useEffect(() => {
         lightingRef.current = lighting;
@@ -59,12 +73,18 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         exportScene: () => engineRef.current?.exportScene() ?? [],
         importScene: (data) => engineRef.current?.importScene(data),
         clearScene:  () => engineRef.current?.clearScene(),
+        undo: () => engineRef.current?.undo(),
+        redo: () => engineRef.current?.redo(),
     }));
 
     // ── Sync active color ──────────────────────────────────
     useEffect(() => {
         engineRef.current?.setColor(activeColor);
     }, [activeColor]);
+
+    useEffect(() => {
+        engineRef.current?.setBlockType(activeBlock);
+    }, [activeBlock]);
 
     // ── Sync active tool ───────────────────────────────────
     useEffect(() => {
@@ -94,6 +114,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         const scene    = createScene();
         const renderer = createRenderer(mount);
         const camera   = createCamera(mount);
+        const postProcessing = createPostProcessing(renderer, scene, camera);
         mount.appendChild(renderer.domElement);
 
         const controls = createOrbitControls(camera, renderer.domElement);
@@ -103,7 +124,8 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         scene.add(createGridHelper(GRID_SIZE));
         scene.add(createAxisLines(GRID_SIZE));
 
-        engineRef.current = createVoxelEngine(scene, camera, renderer.domElement, activeColor);
+        engineRef.current = createVoxelEngine(scene, camera, renderer.domElement, activeColor, activeBlock,
+            state => onHistoryChangeRef.current?.(state));
         engineRef.current.setMode(toolRef.current);
 
         // ── Reset animation ────────────────────────────────
@@ -151,7 +173,8 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             }
 
             controls.update();
-            renderer.render(scene, camera);
+            engineRef.current?.updateLighting();
+            postProcessing.render();
         };
         animate();
 
@@ -164,6 +187,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             camera.right =  FRUSTUM_SIZE * aspect;
             camera.updateProjectionMatrix();
             renderer.setSize(w, h);
+            postProcessing.resize(w, h);
         };
         window.addEventListener('resize', handleResize);
 
@@ -176,6 +200,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             controlsRef.current = null;
             controls.dispose();
             sceneLighting.dispose();
+            postProcessing.dispose();
             mount.removeChild(renderer.domElement);
             renderer.dispose();
         };

@@ -1,11 +1,12 @@
 'use client';
 
-import { useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import IsometricPlane from '@/features/rendering/IsometricPlane';
 import type { IsometricPlaneHandle } from '@/features/rendering/IsometricPlane';
 import Sidebar, { TOOLS, type Tool } from '@/components/editor/Sidebar';
 import { DEFAULT_COLOR } from '@/utils/constants';
 import LightingControls from '@/components/editor/LightingControls';
+import { BLOCKS, DEFAULT_GLOW_COLOR, type BlockType } from '@/features/voxel/blocks';
 import { DEFAULT_LIGHTING, type LightingSettings } from '@/features/rendering/dayNight';
 
 // ── Style tokens ───────────────────────────────────────────
@@ -23,10 +24,59 @@ const TEXT_COLOR = '#e8ecf0';
 export default function Playground() {
     const [activeTool, setActiveTool] = useState<Tool>('select');
     const [activeColor, setActiveColor] = useState<string>(DEFAULT_COLOR);
+    const [activeBlock, setActiveBlock] = useState<BlockType>('custom');
+    const [glowColor, setGlowColor] = useState<string>(DEFAULT_GLOW_COLOR);
     const [lighting, setLighting] = useState(DEFAULT_LIGHTING);
     const [currentTime, setCurrentTime] = useState(DEFAULT_LIGHTING.time);
+    const [history, setHistory] = useState({ canUndo: false, canRedo: false });
     const resetFnRef = useRef<(() => void) | null>(null);
     const planeRef   = useRef<IsometricPlaneHandle>(null);
+
+    const handleUndo = useCallback(() => planeRef.current?.undo(), []);
+    const handleRedo = useCallback(() => planeRef.current?.redo(), []);
+
+    useEffect(() => {
+        const handleHistoryKey = (event: KeyboardEvent) => {
+            if (event.defaultPrevented || event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey)) return;
+            // Keep native undo available in text fields, color inputs, and other controls.
+            if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+            const key = event.key.toLowerCase();
+            if (key === 'z') {
+                event.preventDefault();
+                if (event.shiftKey) handleRedo();
+                else handleUndo();
+            } else if (key === 'y' && !event.shiftKey) {
+                event.preventDefault();
+                handleRedo();
+            }
+        };
+        window.addEventListener('keydown', handleHistoryKey);
+        return () => window.removeEventListener('keydown', handleHistoryKey);
+    }, [handleUndo, handleRedo]);
+
+    const handleBlockSelect = useCallback((type: BlockType) => {
+        setActiveBlock(type);
+        if (type === 'glow') {
+            setActiveColor(glowColor);
+        } else if (type !== 'custom') {
+            const block = BLOCKS.find(block => block.id === type);
+            if (block) setActiveColor(block.color);
+        }
+        setActiveTool('draw');
+    }, [glowColor]);
+
+    const handleColorChange = useCallback((color: string) => {
+        setActiveColor(color);
+        if (activeBlock === 'glow') setGlowColor(color);
+        else setActiveBlock('custom');
+    }, [activeBlock]);
+
+    const handleGlowColorChange = useCallback((color: string) => {
+        setGlowColor(color);
+        setActiveColor(color);
+        setActiveBlock('glow');
+        setActiveTool('draw');
+    }, []);
 
     const handleLightingChange = useCallback((settings: LightingSettings) => {
         setLighting(settings);
@@ -45,7 +95,7 @@ export default function Playground() {
     const handleSave = useCallback(() => {
         const data = planeRef.current?.exportScene() ?? [];
         if (data.length === 0) return;
-        const json = JSON.stringify({ version: 1, voxels: data }, null, 2);
+        const json = JSON.stringify({ version: 2, voxels: data }, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
@@ -92,9 +142,11 @@ export default function Playground() {
                     ref={planeRef}
                     onResetReady={handleResetReady}
                     activeColor={activeColor}
+                    activeBlock={activeBlock}
                     activeTool={activeTool}
                     lighting={lighting}
                     onTimeChange={setCurrentTime}
+                    onHistoryChange={setHistory}
                 />
             </div>
 
@@ -103,8 +155,16 @@ export default function Playground() {
                 activeTool={activeTool}
                 onToolChange={setActiveTool}
                 activeColor={activeColor}
-                onColorChange={setActiveColor}
+                onColorChange={handleColorChange}
                 onResetView={handleResetView}
+                activeBlock={activeBlock}
+                glowColor={glowColor}
+                onBlockSelect={handleBlockSelect}
+                onGlowColorChange={handleGlowColorChange}
+                canUndo={history.canUndo}
+                canRedo={history.canRedo}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
             />
 
             {/* Top-right — Save / Load / Clear */}
@@ -137,6 +197,8 @@ export default function Playground() {
                 <StatusItem label="Tool" value={TOOLS.find(tool => tool.id === activeTool)?.label ?? ''} />
                 <StatusDot />
                 <StatusItem label="Color" value={activeColor.toUpperCase()} />
+                <StatusDot />
+                <StatusItem label="Block" value={BLOCKS.find(block => block.id === activeBlock)?.label ?? ''} />
                 <StatusDot />
                 <StatusItem label="Mode" value="Isometric" />
             </div>

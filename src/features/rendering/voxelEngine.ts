@@ -7,23 +7,38 @@
  */
 
 import * as THREE from 'three';
+import { createBlockMaterials } from './blockMaterials';
+import { createBlockLights } from './blockLights';
+import { parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
+
+export type { VoxelData } from '@/features/voxel/blocks';
 
 const GRID_SIZE = 20;
 const HALF_GRID = GRID_SIZE / 2;
+const HISTORY_LIMIT = 100;
 
-export interface VoxelData {
-    x: number;
-    y: number;
-    z: number;
-    color: string;
+export interface HistoryState {
+    canUndo: boolean;
+    canRedo: boolean;
+}
+
+interface VoxelChange {
+    key: string;
+    before?: VoxelData;
+    after?: VoxelData;
 }
 
 export interface VoxelEngine {
     setColor(hex: string): void;
+    setBlockType(type: BlockType): void;
     setMode(mode: 'draw' | 'erase' | 'select' | 'fill'): void;
     exportScene(): VoxelData[];
     importScene(data: VoxelData[]): void;
     clearScene(): void;
+    undo(): void;
+    redo(): void;
+    getHistoryState(): HistoryState;
+    updateLighting(): void;
     dispose(): void;
 }
 
@@ -32,14 +47,24 @@ export function createVoxelEngine(
     camera: THREE.Camera,
     domElement: HTMLElement,
     initialColor: string,
+    initialBlockType: BlockType = 'custom',
+    onHistoryChange?: (state: HistoryState) => void,
 ): VoxelEngine {
 
     // ── Shared State ─────────────────────────────────────────
     let currentColor = initialColor;
+    let currentBlockType = initialBlockType;
+    const blockMaterials = createBlockMaterials();
+    const blockLights = createBlockLights(scene);
     let currentMode: 'draw' | 'erase' | 'select' | 'fill' = 'select';
 
     /** Placed voxel meshes keyed by "x,y,z" */
     const voxels = new Map<string, THREE.Mesh>();
+    const undoStack: VoxelChange[][] = [];
+    const redoStack: VoxelChange[][] = [];
+
+    const getHistoryState = (): HistoryState => ({ canUndo: undoStack.length > 0, canRedo: redoStack.length > 0 });
+    const notifyHistory = () => onHistoryChange?.(getHistoryState());
 
     // ── Invisible Floor ──────────────────────────────────────
     const floorMesh = new THREE.Mesh(
@@ -99,6 +124,71 @@ export function createVoxelEngine(
 
     function cellKey(x: number, y: number, z: number) {
         return `${x},${y},${z}`;
+    }
+
+    function addVoxel(data: VoxelData) {
+        const { x, y, z, color, blockType = 'custom' } = data;
+        const key = cellKey(x, y, z);
+        const existing = voxels.get(key);
+        if (existing) {
+            scene.remove(existing);
+            existing.geometry.dispose();
+        }
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), blockMaterials.get(blockType, color));
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.position.set(x, y, z);
+        mesh.userData.voxel = { x, y, z, color, blockType } satisfies VoxelData;
+        scene.add(mesh);
+        voxels.set(key, mesh);
+        blockLights.set(key, mesh.position, blockType, color);
+        mesh.updateMatrixWorld();
+    }
+
+    function removeVoxel(key: string) {
+        const mesh = voxels.get(key);
+        if (!mesh) return;
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        voxels.delete(key);
+        blockLights.remove(key);
+    }
+
+    function voxelAt(key: string): VoxelData | undefined {
+        const mesh = voxels.get(key);
+        return mesh ? { ...mesh.userData.voxel as VoxelData } : undefined;
+    }
+
+    function applyChanges(changes: VoxelChange[], direction: 'before' | 'after') {
+        changes.forEach(change => {
+            const data = change[direction];
+            if (data) addVoxel(data);
+            else removeVoxel(change.key);
+        });
+        blockLights.update(camera.position);
+        onMouseLeave();
+    }
+
+    function commit(changes: VoxelChange[]) {
+        const changed = changes.filter(({ before, after }) =>
+            before?.color !== after?.color || before?.blockType !== after?.blockType);
+        if (changed.length === 0) return;
+        applyChanges(changed, 'after');
+        undoStack.push(changed);
+        if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+        redoStack.length = 0;
+        notifyHistory();
+    }
+
+    // Bulk operations are a single undo step; unchanged cells aren't retained.
+    function replaceScene(data: VoxelData[]) {
+        const next = new Map(data.map(voxel => [cellKey(voxel.x, voxel.y, voxel.z), voxel]));
+        const changes: VoxelChange[] = [];
+        voxels.forEach((_, key) => changes.push({ key, before: voxelAt(key), after: next.get(key) }));
+        next.forEach((voxel, key) => {
+            if (!voxels.has(key)) changes.push({ key, after: voxel });
+        });
+        commit(changes);
     }
 
     interface HitTargets {
@@ -212,13 +302,7 @@ export function createVoxelEngine(
 
     function eraseVoxelAt(hitBlock: THREE.Vector3) {
         const key = cellKey(hitBlock.x, hitBlock.y, hitBlock.z);
-        const existing = voxels.get(key);
-        if (existing) {
-            scene.remove(existing);
-            existing.geometry.dispose();
-            (existing.material as THREE.Material).dispose();
-            voxels.delete(key);
-        }
+        commit([{ key, before: voxelAt(key) }]);
     }
 
     function onMouseDown(event: MouseEvent) {
@@ -242,22 +326,9 @@ export function createVoxelEngine(
             // Left click = Place block
             if (place) {
                 const key = cellKey(place.x, place.y, place.z);
-
-                const existing = voxels.get(key);
-                if (existing) {
-                    scene.remove(existing);
-                    existing.geometry.dispose();
-                    (existing.material as THREE.Material).dispose();
-                }
-
-                const geo  = new THREE.BoxGeometry(1, 1, 1);
-                const mat  = new THREE.MeshStandardMaterial({ color: new THREE.Color(currentColor), roughness: 1, metalness: 0 });
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                mesh.position.copy(place);
-                scene.add(mesh);
-                voxels.set(key, mesh);
+                commit([{ key, before: voxelAt(key), after: {
+                    x: place.x, y: place.y, z: place.z, color: currentColor, blockType: currentBlockType,
+                } }]);
 
                 onMouseMove(event);
             }
@@ -269,6 +340,7 @@ export function createVoxelEngine(
     domElement.addEventListener('mousedown', onMouseDown);
     // Prevent context menu from popping up on right click
     domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+    notifyHistory();
 
     // ── Public API ───────────────────────────────────────────
     return {
@@ -276,6 +348,9 @@ export function createVoxelEngine(
             currentColor = hex;
             const c = new THREE.Color(hex);
             hoverMat.color.copy(c);
+        },
+        setBlockType(type: BlockType) {
+            currentBlockType = type;
         },
         setMode(mode: 'draw' | 'erase' | 'select' | 'fill') {
             currentMode = mode;
@@ -287,44 +362,40 @@ export function createVoxelEngine(
 
         exportScene(): VoxelData[] {
             const result: VoxelData[] = [];
-            voxels.forEach((mesh, key) => {
-                const [x, y, z] = key.split(',').map(Number);
-                const mat = mesh.material as THREE.MeshStandardMaterial;
-                result.push({ x, y, z, color: '#' + mat.color.getHexString() });
+            voxels.forEach(mesh => {
+                result.push({ ...mesh.userData.voxel as VoxelData });
             });
             return result;
         },
 
         importScene(data: VoxelData[]) {
-            // Clear existing
-            voxels.forEach(mesh => {
-                scene.remove(mesh);
-                mesh.geometry.dispose();
-                (mesh.material as THREE.Material).dispose();
-            });
-            voxels.clear();
-
-            // Rebuild
-            data.forEach(({ x, y, z, color }) => {
-                const key = cellKey(x, y, z);
-                const geo  = new THREE.BoxGeometry(1, 1, 1);
-                const mat  = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 1, metalness: 0 });
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                mesh.position.set(x, y, z);
-                scene.add(mesh);
-                voxels.set(key, mesh);
-            });
+            replaceScene(parseVoxels(data));
         },
 
         clearScene() {
-            voxels.forEach(mesh => {
-                scene.remove(mesh);
-                mesh.geometry.dispose();
-                (mesh.material as THREE.Material).dispose();
-            });
-            voxels.clear();
+            replaceScene([]);
+        },
+
+        undo() {
+            const changes = undoStack.pop();
+            if (!changes) return;
+            applyChanges(changes, 'before');
+            redoStack.push(changes);
+            notifyHistory();
+        },
+
+        redo() {
+            const changes = redoStack.pop();
+            if (!changes) return;
+            applyChanges(changes, 'after');
+            undoStack.push(changes);
+            notifyHistory();
+        },
+
+        getHistoryState,
+
+        updateLighting() {
+            blockLights.update(camera.position);
         },
 
         dispose() {
@@ -335,10 +406,13 @@ export function createVoxelEngine(
             voxels.forEach(mesh => {
                 scene.remove(mesh);
                 mesh.geometry.dispose();
-                (mesh.material as THREE.Material).dispose();
             });
             voxels.clear();
 
+            blockMaterials.dispose();
+            undoStack.length = 0;
+            redoStack.length = 0;
+            blockLights.dispose();
             scene.remove(floorMesh, hoverMesh, edgeLines, eraseHoverMesh, eraseEdgeLines);
             boxGeo.dispose();
             hoverMat.dispose();
