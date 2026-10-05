@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { createBlockMaterials } from './blockMaterials';
 import { createBlockLights } from './blockLights';
 import { isBlockType, parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
+import type { Tool } from '@/types/tools';
 
 export type { VoxelData } from '@/features/voxel/blocks';
 
@@ -31,7 +32,7 @@ interface VoxelChange {
 export interface VoxelEngine {
     setColor(hex: string): void;
     setBlockType(type: BlockType): void;
-    setMode(mode: 'draw' | 'erase' | 'select' | 'fill'): void;
+    setMode(mode: Tool): void;
     exportScene(): VoxelData[];
     importScene(data: VoxelData[]): void;
     clearScene(): void;
@@ -49,6 +50,7 @@ export function createVoxelEngine(
     initialColor: string,
     initialBlockType: BlockType = 'custom',
     onHistoryChange?: (state: HistoryState) => void,
+    onPick?: (voxel: VoxelData) => void,
 ): VoxelEngine {
 
     // ── Shared State ─────────────────────────────────────────
@@ -56,7 +58,7 @@ export function createVoxelEngine(
     let currentBlockType: BlockType = isBlockType(initialBlockType) ? initialBlockType : 'custom';
     const blockMaterials = createBlockMaterials();
     const blockLights = createBlockLights(scene);
-    let currentMode: 'draw' | 'erase' | 'select' | 'fill' = 'select';
+    let currentMode: Tool = 'select';
 
     /** Placed voxel meshes keyed by "x,y,z" */
     const voxels = new Map<string, THREE.Mesh>();
@@ -262,15 +264,9 @@ export function createVoxelEngine(
             return;
         }
 
-        if (currentMode !== 'draw' && currentMode !== 'select') {
-            hoverMesh.visible = false;
-            edgeLines.visible = false;
-            return;
-        }
-
         const { place, hitBlock } = getTargets(event);
 
-        if (currentMode === 'select') {
+        if (currentMode !== 'draw') {
             // Select mode: only show highlight on hit block
             if (hitBlock) {
                 hoverMesh.position.copy(hitBlock);
@@ -306,6 +302,39 @@ export function createVoxelEngine(
     }
 
     function onMouseDown(event: MouseEvent) {
+        if (event.button === 0 && ['paint', 'fill', 'pick'].includes(currentMode)) {
+            const { hitBlock } = getTargets(event);
+            if (!hitBlock) return;
+            const key = cellKey(hitBlock.x, hitBlock.y, hitBlock.z);
+            const source = voxelAt(key);
+            if (!source) return;
+            if (currentMode === 'pick') {
+                onPick?.(source);
+                return;
+            }
+            if (currentMode === 'paint') {
+                commit([{ key, before: source, after: { ...source, color: currentColor, blockType: currentBlockType } }]);
+            } else {
+                const queue = [key];
+                const visited = new Set<string>(queue);
+                const changes: VoxelChange[] = [];
+                for (let index = 0; index < queue.length; index++) {
+                    const voxel = voxelAt(queue[index]);
+                    if (!voxel || voxel.blockType !== source.blockType || voxel.color.toLowerCase() !== source.color.toLowerCase()) continue;
+                    changes.push({ key: queue[index], before: voxel, after: { ...voxel, color: currentColor, blockType: currentBlockType } });
+                    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+                        const neighbor = cellKey(voxel.x + dx, voxel.y + dy, voxel.z + dz);
+                        if (!visited.has(neighbor) && voxels.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+                commit(changes);
+            }
+            onMouseMove(event);
+            return;
+        }
         if (currentMode === 'erase') {
             if (event.button === 0) {
                 // Left click in erase mode = remove hovered voxel
@@ -339,7 +368,8 @@ export function createVoxelEngine(
     domElement.addEventListener('mouseleave', onMouseLeave);
     domElement.addEventListener('mousedown', onMouseDown);
     // Prevent context menu from popping up on right click
-    domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+    const preventContextMenu = (event: Event) => event.preventDefault();
+    domElement.addEventListener('contextmenu', preventContextMenu);
     notifyHistory();
 
     // ── Public API ───────────────────────────────────────────
@@ -352,7 +382,7 @@ export function createVoxelEngine(
         setBlockType(type: BlockType) {
             currentBlockType = isBlockType(type) ? type : 'custom';
         },
-        setMode(mode: 'draw' | 'erase' | 'select' | 'fill') {
+        setMode(mode: Tool) {
             currentMode = mode;
             hoverMesh.visible = false;
             edgeLines.visible = false;
@@ -402,6 +432,7 @@ export function createVoxelEngine(
             domElement.removeEventListener('mousemove', onMouseMove);
             domElement.removeEventListener('mouseleave', onMouseLeave);
             domElement.removeEventListener('mousedown', onMouseDown);
+            domElement.removeEventListener('contextmenu', preventContextMenu);
             
             voxels.forEach(mesh => {
                 scene.remove(mesh);

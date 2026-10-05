@@ -1,54 +1,14 @@
 'use client';
 
-import { useId, useRef, useState, type Ref } from 'react';
-import ColorPickerButton from '@/components/editor/ColorPicker';
-import BlockPicker from '@/components/editor/BlockPicker';
-import type { BlockType } from '@/features/voxel/blocks';
-import { GLASS, TEXT_COLOR, ACCENT } from '@/utils/constants';
-import type { Tool, ToolDef } from '@/types/tools';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import ColorPicker from './ColorPicker';
+import BlockPicker, { BlockPreview } from './BlockPicker';
+import { BLOCKS, type BlockType } from '@/features/voxel/blocks';
+import type { Tool } from '@/types/tools';
+import EditorIcon, { type EditorIconName } from './EditorIcon';
+import { TOOLS } from './editorTools';
+import styles from './Sidebar.module.css';
 
-// ── Icons ──────────────────────────────────────────────────
-const CursorIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 4l7 18 3-7 7-3z" />
-    </svg>
-);
-const PencilIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-    </svg>
-);
-const EraserIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 20H7L3 16l9.5-9.5 7.5 7.5-2.5 2.5" /><path d="M6.5 17.5l4-4" />
-    </svg>
-);
-const BlocksIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m12 2 5 3v6l-5 3-5-3V5zM7 5l5 3 5-3M12 8v6M7 11l-5 3v6l5 3 5-3v-6M2 14l5 3 5-3M7 17v6M17 11l5 3v6l-5 3-5-3M12 14l5 3 5-3M17 17v6" />
-    </svg>
-);
-const IsoIcon = () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73L13 2.27a2 2 0 0 0-2 0L4 6.27A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
-    </svg>
-);
-const HistoryIcon = ({ redo = false }: { redo?: boolean }) => (
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-        style={{ transform: redo ? 'scaleX(-1)' : undefined }}>
-        <path d="M9 4 4 9l5 5M4 9h10a6 6 0 0 1 0 12h-3" />
-    </svg>
-);
-
-export const TOOLS: ToolDef[] = [
-    { id: 'select', label: 'Select', key: 'V', icon: <CursorIcon /> },
-    { id: 'draw', label: 'Draw', key: 'B', icon: <PencilIcon /> },
-    { id: 'erase', label: 'Erase', key: 'E', icon: <EraserIcon /> },
-];
-
-// ── Sidebar Props ──────────────────────────────────────────
 interface SidebarProps {
     activeTool: Tool;
     onToolChange: (tool: Tool) => void;
@@ -63,140 +23,102 @@ interface SidebarProps {
     canRedo: boolean;
     onUndo: () => void;
     onRedo: () => void;
+    showGrid: boolean;
+    onToggleGrid: () => void;
+    onSave: () => void;
+    onLoad: () => void;
+    onClear: () => void;
+    saveStatus: string;
 }
 
-// ── Sidebar Component ──────────────────────────────────────
-export default function Sidebar({
-    activeTool,
-    onToolChange,
-    activeColor,
-    onColorChange,
-    onResetView,
-    activeBlock,
-    glowColor,
-    onBlockSelect,
-    onGlowColorChange,
-    canUndo,
-    canRedo,
-    onUndo,
-    onRedo,
-}: SidebarProps) {
-    const [blocksOpen, setBlocksOpen] = useState(false);
-    const blocksPanelId = useId();
-    const blocksButtonRef = useRef<HTMLButtonElement>(null);
-    const closeBlocks = () => {
-        setBlocksOpen(false);
-        blocksButtonRef.current?.focus();
+export default function Sidebar(props: SidebarProps) {
+    const [panel, setPanel] = useState<'blocks' | 'colors' | null>(null);
+    const panelId = useId();
+    const colorPanelId = useId();
+    const sidebarRef = useRef<HTMLElement>(null);
+    const materialButton = useRef<HTMLButtonElement>(null);
+    const colorButton = useRef<HTMLButtonElement>(null);
+    const closePanel = () => {
+        (panel === 'colors' ? colorButton : materialButton).current?.focus();
+        setPanel(null);
     };
+    const block = BLOCKS.find(block => block.id === props.activeBlock);
 
-    return (
-        <aside aria-label="Editor sidebar" onKeyDown={event => {
-            if (event.key === 'Escape' && blocksOpen) {
-                event.stopPropagation();
-                closeBlocks();
-            }
-        }} style={{
-            position: 'absolute', left: '16px', top: '50%',
-            transform: 'translateY(-50%)',
-            display: 'flex', alignItems: 'center', gap: '10px', zIndex: 5,
-        }}>
-        <div style={{
-            position: 'relative', zIndex: 1,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-            padding: '10px',
-            ...GLASS,
-        }}>
-            <SidebarBtn onClick={onUndo} disabled={!canUndo} label="Undo" title="Undo (Ctrl/⌘+Z)">
-                <HistoryIcon />
-            </SidebarBtn>
-            <SidebarBtn onClick={onRedo} disabled={!canRedo} label="Redo" title="Redo (Ctrl/⌘+Shift+Z or Ctrl+Y)">
-                <HistoryIcon redo />
-            </SidebarBtn>
+    useEffect(() => {
+        if (!panel) return;
+        const dismiss = (event: PointerEvent) => {
+            if (event.target instanceof Node && !sidebarRef.current?.contains(event.target)) setPanel(null);
+        };
+        document.addEventListener('pointerdown', dismiss);
+        return () => document.removeEventListener('pointerdown', dismiss);
+    }, [panel]);
 
-            <SidebarDivider />
-
-            {TOOLS.map(tool => (
-                <SidebarBtn
-                    key={tool.id}
-                    active={activeTool === tool.id}
-                    onClick={() => onToolChange(tool.id)}
-                    title={`${tool.label} (${tool.key})`}
-                >
-                    {tool.icon}
-                </SidebarBtn>
-            ))}
-
-            <SidebarDivider />
-
-            <SidebarBtn active={blocksOpen} onClick={() => setBlocksOpen(open => !open)}
-                title="Building blocks" expanded={blocksOpen} controls={blocksPanelId} buttonRef={blocksButtonRef}>
-                <BlocksIcon />
-            </SidebarBtn>
-
-            <ColorPickerButton activeColor={activeColor} onColorChange={onColorChange} />
-
-            <SidebarDivider />
-
-            <SidebarBtn onClick={onResetView} title="Reset to isometric view">
-                <IsoIcon />
-            </SidebarBtn>
+    return <aside ref={sidebarRef} aria-label="Editor sidebar" className={styles.sidebar}
+        onKeyDown={event => { if (event.key === 'Escape' && panel) { event.stopPropagation(); closePanel(); } }}>
+        <header className={styles.header}>
+            <div className={styles.brandIcon} title="NodeZtudio"><EditorIcon name="cube" size={22} /></div>
+        </header>
+        <div className={styles.body}>
+            <Section title="Tools">
+                <div className={styles.toolGrid} role="group" aria-label="Editing tools">
+                    {TOOLS.map(item => <button key={item.id} type="button" className={styles.toolButton} aria-label={item.label}
+                        aria-pressed={props.activeTool === item.id} title={`${item.label} (${item.key}) — ${item.description}`} onClick={() => props.onToolChange(item.id)}>
+                        {item.icon}
+                    </button>)}
+                </div>
+            </Section>
+            <Section title="Material">
+                <button ref={materialButton} type="button" className={styles.materialButton} aria-label="Choose building material"
+                    aria-expanded={panel === 'blocks'} aria-controls={panelId} onClick={() => setPanel(value => value === 'blocks' ? null : 'blocks')} title={`Building blocks: ${block?.label ?? 'Custom Color'}`}>
+                    <BlockPreview type={props.activeBlock} color={props.activeBlock === 'glow' ? props.glowColor : props.activeColor} />
+                </button>
+                <button ref={colorButton} type="button" className={styles.colorButton} aria-label="Open color palette" title={`Paint color: ${props.activeColor.toUpperCase()}`}
+                    aria-expanded={panel === 'colors'} aria-controls={colorPanelId} onClick={() => setPanel(value => value === 'colors' ? null : 'colors')}>
+                    <span className={styles.colorSwatch} style={{ background: props.activeColor }} />
+                </button>
+            </Section>
+            <Section title="History">
+                <div className={styles.actionGrid}>
+                    <Action name="undo" label="Undo" shortcut="Ctrl/⌘ Z" disabled={!props.canUndo} onClick={props.onUndo} />
+                    <Action name="redo" label="Redo" shortcut="Ctrl/⌘ ⇧ Z" disabled={!props.canRedo} onClick={props.onRedo} />
+                </div>
+            </Section>
+            <Section title="View">
+                <div className={styles.actionGrid}>
+                    <Action name="grid" label="Grid" shortcut="G" pressed={props.showGrid} onClick={props.onToggleGrid} />
+                    <Action name="reset" label="Reset view" shortcut="R" onClick={props.onResetView} />
+                </div>
+            </Section>
+            <Section title="Scene">
+                <div className={styles.actionGrid}>
+                    <Action name="save" label="Save file" shortcut="Ctrl/⌘ S" onClick={props.onSave} />
+                    <Action name="load" label="Open file" onClick={props.onLoad} />
+                </div>
+                <Action name="clear" label="Clear scene" danger onClick={props.onClear} />
+            </Section>
         </div>
-        {blocksOpen && <BlockPicker id={blocksPanelId} activeBlock={activeBlock} activeColor={activeColor}
-            glowColor={glowColor} onSelect={onBlockSelect} onGlowColorChange={onGlowColorChange} onClose={closeBlocks} />}
-        </aside>
-    );
+        {panel === 'blocks' && <div className={styles.library}><BlockPicker id={panelId} embedded activeBlock={props.activeBlock} activeColor={props.activeColor}
+            glowColor={props.glowColor} onSelect={props.onBlockSelect} onGlowColorChange={props.onGlowColorChange} onClose={closePanel} /></div>}
+        {panel === 'colors' && <section id={colorPanelId} aria-label="Paint colors" className={`${styles.library} ${styles.colorFlyout}`}>
+            <div className={styles.flyoutHeader}><strong>Paint color</strong><button type="button" aria-label="Close color palette" onClick={closePanel}><EditorIcon name="close" size={16} /></button></div>
+            <ColorPicker activeColor={props.activeColor} onColorChange={props.onColorChange} />
+        </section>}
+        <footer className={styles.footer} title={props.saveStatus}>
+            <span className={styles.saveDot} data-error={props.saveStatus.includes('unavailable')} />
+            <span role="status" className={styles.srOnly}>{props.saveStatus}</span>
+        </footer>
+    </aside>;
 }
 
-// ── Sub-components ─────────────────────────────────────────
-
-function SidebarDivider() {
-    return <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.1)', margin: '2px 0' }} />;
+function Section({ title, children }: { title: string; children: ReactNode }) {
+    return <section className={styles.section} aria-label={title}>{children}</section>;
 }
 
-function SidebarBtn({ children, active, onClick, title, expanded, controls, buttonRef, disabled = false, label }: {
-    children: React.ReactNode;
-    active?: boolean;
-    onClick: () => void;
-    title?: string;
-    expanded?: boolean;
-    controls?: string;
-    buttonRef?: Ref<HTMLButtonElement>;
-    disabled?: boolean;
-    label?: string;
+function Action({ name, label, shortcut, onClick, disabled, pressed, danger }: {
+    name: EditorIconName; label: string; shortcut?: string; onClick: () => void; disabled?: boolean; pressed?: boolean; danger?: boolean;
 }) {
-    return (
-        <button
-            type="button"
-            ref={buttonRef}
-            onClick={onClick}
-            title={title}
-            disabled={disabled}
-            aria-label={label ?? title}
-            aria-expanded={expanded}
-            aria-controls={controls}
-            style={{
-                width: '38px', height: '38px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: active ? 'rgba(0,180,255,0.22)' : 'rgba(255,255,255,0.04)',
-                border: active ? '1px solid rgba(0,180,255,0.55)' : '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '10px',
-                color: active ? ACCENT : TEXT_COLOR,
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                opacity: disabled ? 0.35 : 1,
-                transition: 'all 0.15s',
-                outlineOffset: '3px',
-            }}
-            onMouseEnter={e => {
-                if (!active && !disabled) e.currentTarget.style.background = 'rgba(255,255,255,0.10)';
-            }}
-            onMouseLeave={e => {
-                if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
-            }}
-        >
-            {children}
-        </button>
-    );
+    return <button type="button" className={`${styles.action} ${danger ? styles.danger : ''}`} onClick={onClick} disabled={disabled}
+        aria-label={label} aria-pressed={pressed} title={shortcut ? `${label} (${shortcut})` : label}>
+        <EditorIcon name={name} size={16} />
+    </button>;
 }
-
-// Re-export types for consumers that import from this module
-export type { Tool, ToolDef };

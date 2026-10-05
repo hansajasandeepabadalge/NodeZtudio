@@ -10,7 +10,7 @@ function Face({ kind, color }: { kind?: TextureKind; color: string }) {
     return <path fill={color} d="M0 0h16v16H0z" />;
 }
 
-function BlockPreview({ type, color }: { type: BlockType; color: string }) {
+export function BlockPreview({ type, color }: { type: BlockType; color: string }) {
     const faces = type === 'custom' || type === 'glow' ? undefined : blockFaces(type);
     const emission = blockEmission(type, color);
     return (
@@ -37,13 +37,14 @@ interface Props {
     onSelect: (block: BlockType) => void;
     onGlowColorChange: (color: string) => void;
     onClose: () => void;
+    embedded?: boolean;
 }
 
-const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, glowColor, onSelect, onGlowColorChange, onClose }: Props) {
+const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, glowColor, onSelect, onGlowColorChange, onClose, embedded = false }: Props) {
     return (
         <section id={id} aria-label="Block library" style={{
-            ...GLASS, width: 'min(260px, calc(100vw - 112px))', padding: 12, boxSizing: 'border-box',
-            color: TEXT_COLOR, maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto',
+            ...(embedded ? {} : GLASS), width: embedded ? '100%' : 'min(260px, calc(100vw - 112px))', padding: embedded ? 0 : 12, boxSizing: 'border-box',
+            color: TEXT_COLOR, maxHeight: embedded ? undefined : 'calc(100dvh - 32px)', overflowY: embedded ? undefined : 'auto',
         }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <strong style={{ fontSize: 12 }}>Building blocks</strong>

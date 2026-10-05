@@ -4,6 +4,9 @@ import { registerHooks } from 'node:module';
 
 registerHooks({
     resolve(specifier, context, nextResolve) {
+        if (specifier.startsWith('@/')) {
+            return nextResolve(new URL(`../src/${specifier.slice(2)}.ts`, import.meta.url).href, context);
+        }
         if (specifier.startsWith('.') && context.parentURL?.endsWith('.ts') && !specifier.endsWith('.ts')) {
             return nextResolve(`${specifier}.ts`, context);
         }
@@ -35,6 +38,17 @@ test('saving an empty scene replaces previous blocks instead of bringing them ba
     saveLocalSession(storage, snapshot);
     saveLocalSession(storage, { ...snapshot, voxels: [] });
     assert.deepEqual(readLocalSession(storage).voxels, []);
+});
+
+test('new tool selections and grid visibility persist while older sessions still load', () => {
+    const storage = memoryStorage();
+    for (const activeTool of ['paint', 'fill', 'pick']) {
+        const session = { ...snapshot, activeTool, showGrid: false };
+        saveLocalSession(storage, session);
+        assert.deepEqual(readLocalSession(storage), session);
+    }
+    saveLocalSession(storage, snapshot);
+    assert.deepEqual(readLocalSession(storage), snapshot);
 });
 
 test('corrupt or incompatible sessions are rejected without partially restoring settings', () => {

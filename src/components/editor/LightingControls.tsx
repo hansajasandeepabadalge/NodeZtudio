@@ -18,15 +18,16 @@ export default function LightingControls({ settings, currentTime, onChange }: Pr
     };
 
     return (
-        <section aria-label="Scene lighting" style={{
-            ...GLASS, position: 'absolute', right: 16, top: 68,
+        <details aria-label="Scene lighting" style={{
+            ...GLASS, position: 'absolute', right: 16, top: 16,
             width: 'min(240px, calc(100vw - 100px))', boxSizing: 'border-box',
             padding: 14, color: TEXT_COLOR, fontSize: 12,
         }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+            <summary style={{ display: 'flex', justifyContent: 'space-between', gap: 12, cursor: 'pointer', listStyle: 'none' }}>
                 <strong>Day & night</strong>
                 <output aria-label="Current scene time" style={{ fontVariantNumeric: 'tabular-nums' }}>{formatTime(currentTime)}</output>
-            </div>
+            </summary>
+            <div style={{ marginTop: 14 }}>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
                 <input type="checkbox" checked={settings.automatic}
                     onChange={event => onChange({ ...settings, automatic: event.target.checked, time: currentTime })} />
@@ -62,6 +63,7 @@ export default function LightingControls({ settings, currentTime, onChange }: Pr
                     style={{ width: '100%', accentColor: '#d0a34f', margin: 0 }} />
             </label>
             <p style={{ margin: '10px 0 0', fontSize: 10, opacity: 0.55 }}>Adjusting the time pauses the cycle.</p>
-        </section>
+            </div>
+        </details>
     );
 }

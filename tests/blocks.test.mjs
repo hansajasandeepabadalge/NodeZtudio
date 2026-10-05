@@ -55,7 +55,7 @@ test('scene lighting crosses the other axis and keeps shaded faces lit across th
 // Image loading requires a browser; retain the requested URL for material assertions.
 mock.method(THREE.TextureLoader.prototype, 'load', url => new THREE.Texture({ src: url }));
 
-function setup(onHistoryChange) {
+function setup(onHistoryChange, onPick) {
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 100);
     camera.up.set(0, 0, -1);
@@ -68,7 +68,7 @@ function setup(onHistoryChange) {
         removeEventListener: name => listeners.delete(name),
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 200 }),
     };
-    const engine = createVoxelEngine(scene, camera, dom, '#896344', 'custom', onHistoryChange);
+    const engine = createVoxelEngine(scene, camera, dom, '#896344', 'custom', onHistoryChange, onPick);
     return { engine, scene, listeners };
 }
 
@@ -161,6 +161,66 @@ test('drawing places the selected preset and switching back restores custom colo
         assert.equal(blocks[1].blockType, 'custom');
         assert.equal(blocks[1].color, '#123456');
         assert.equal(blocks[1].y, 1.5, 'blocks should stack');
+    } finally { engine.dispose(); }
+});
+
+test('paint replaces the clicked block in place and supports undo', () => {
+    const { engine, scene, listeners } = setup();
+    const original = [{ x: .5, y: .5, z: .5, color: '#896344', blockType: 'dirt' }];
+    try {
+        engine.importScene(original);
+        engine.setBlockType('leaves');
+        engine.setColor('#6b9f43');
+        engine.setMode('paint');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), [{ ...original[0], color: '#6b9f43', blockType: 'leaves' }]);
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), original);
+    } finally { engine.dispose(); }
+});
+
+test('fill changes only connected matching blocks and is one undo action', () => {
+    const { engine, scene, listeners } = setup();
+    const original = [
+        { x: .5, y: .5, z: .5, color: '#896344', blockType: 'dirt' },
+        { x: 1.5, y: .5, z: .5, color: '#896344', blockType: 'dirt' },
+        { x: 2.5, y: .5, z: .5, color: '#92958c', blockType: 'stone' },
+        { x: .5, y: .5, z: 1.5, color: '#123456', blockType: 'dirt' },
+        { x: 5.5, y: .5, z: .5, color: '#896344', blockType: 'dirt' },
+    ];
+    try {
+        engine.importScene(original);
+        engine.setBlockType('glow');
+        engine.setColor('#33aaff');
+        engine.setMode('fill');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        const filled = engine.exportScene();
+        assert.deepEqual(filled, original.map((voxel, index) => index < 2 ? { ...voxel, color: '#33aaff', blockType: 'glow' } : voxel));
+        assert.equal(scene.children.filter(child => child.isPointLight && child.intensity > 0).length, 2);
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), original);
+        assert.equal(scene.children.filter(child => child.isPointLight && child.intensity > 0).length, 0);
+        engine.redo();
+        assert.deepEqual(engine.exportScene(), filled);
+    } finally { engine.dispose(); }
+});
+
+test('sample returns the clicked material and color without editing the scene or history', () => {
+    const samples = [];
+    const { engine, scene, listeners } = setup(undefined, voxel => samples.push(voxel));
+    const original = [{ x: .5, y: .5, z: .5, color: '#33aaff', blockType: 'glow' }];
+    try {
+        engine.importScene(original);
+        const history = engine.getHistoryState();
+        engine.setMode('pick');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        assert.deepEqual(samples, original);
+        samples[0].color = '#ffffff';
+        assert.deepEqual(engine.exportScene(), original);
+        assert.deepEqual(engine.getHistoryState(), history);
     } finally { engine.dispose(); }
 });
 

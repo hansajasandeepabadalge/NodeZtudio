@@ -35,6 +35,8 @@ interface IsometricPlaneProps {
     lighting?: LightingSettings;
     onTimeChange?: (time: number) => void;
     onHistoryChange?: (state: HistoryState) => void;
+    onPick?: (voxel: VoxelData) => void;
+    showGrid?: boolean;
 }
 
 const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(function IsometricPlane({
@@ -45,6 +47,8 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
     lighting = DEFAULT_LIGHTING,
     onTimeChange,
     onHistoryChange,
+    onPick,
+    showGrid = true,
 }, ref) {
     const mountRef     = useRef<HTMLDivElement>(null);
     const engineRef    = useRef<ReturnType<typeof createVoxelEngine> | null>(null);
@@ -55,10 +59,19 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
     const onTimeChangeRef = useRef(onTimeChange);
 
     const onHistoryChangeRef = useRef(onHistoryChange);
+    const onPickRef = useRef(onPick);
+    const gridRef = useRef<THREE.Object3D | null>(null);
+    const axesRef = useRef<THREE.Object3D | null>(null);
 
     useEffect(() => {
         onHistoryChangeRef.current = onHistoryChange;
-    }, [onHistoryChange]);
+        onPickRef.current = onPick;
+    }, [onHistoryChange, onPick]);
+
+    useEffect(() => {
+        if (gridRef.current) gridRef.current.visible = showGrid;
+        if (axesRef.current) axesRef.current.visible = showGrid;
+    }, [showGrid]);
 
     useEffect(() => {
         lightingRef.current = lighting;
@@ -123,11 +136,15 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         controlsRef.current = controls;
 
         const sceneLighting = addSceneLighting(scene);
-        scene.add(createGridHelper(GRID_SIZE));
-        scene.add(createAxisLines(GRID_SIZE));
+        const grid = createGridHelper(GRID_SIZE);
+        const axes = createAxisLines(GRID_SIZE);
+        grid.visible = axes.visible = showGrid;
+        gridRef.current = grid;
+        axesRef.current = axes;
+        scene.add(grid, axes);
 
         engineRef.current = createVoxelEngine(scene, camera, renderer.domElement, activeColor, activeBlock,
-            state => onHistoryChangeRef.current?.(state));
+            state => onHistoryChangeRef.current?.(state), voxel => onPickRef.current?.(voxel));
         engineRef.current.setMode(toolRef.current);
 
         // ── Reset animation ────────────────────────────────
@@ -200,6 +217,8 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             engineRef.current?.dispose();
             engineRef.current = null;
             controlsRef.current = null;
+            gridRef.current = null;
+            axesRef.current = null;
             controls.dispose();
             sceneLighting.dispose();
             postProcessing.dispose();

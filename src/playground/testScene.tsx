@@ -3,23 +3,15 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import IsometricPlane from '@/features/rendering/IsometricPlane';
 import type { IsometricPlaneHandle } from '@/features/rendering/IsometricPlane';
-import Sidebar, { TOOLS, type Tool } from '@/components/editor/Sidebar';
-import { DEFAULT_COLOR } from '@/utils/constants';
+import Sidebar from '@/components/editor/Sidebar';
+import { TOOLS } from '@/components/editor/editorTools';
+import type { Tool } from '@/types/tools';
+import { DEFAULT_COLOR, GLASS, TEXT_COLOR } from '@/utils/constants';
 import LightingControls from '@/components/editor/LightingControls';
-import { BLOCKS, DEFAULT_GLOW_COLOR, type BlockType } from '@/features/voxel/blocks';
+import { BLOCKS, DEFAULT_GLOW_COLOR, type BlockType, type VoxelData } from '@/features/voxel/blocks';
 import { DEFAULT_LIGHTING, type LightingSettings } from '@/features/rendering/dayNight';
 import { AUTOSAVE_INTERVAL_MS, readLocalSession, saveLocalSession, type LocalSession } from '@/features/voxel/localSession';
-
-// ── Style tokens ───────────────────────────────────────────
-const GLASS: React.CSSProperties = {
-    background: 'rgba(10, 14, 20, 0.72)',
-    backdropFilter: 'blur(14px)',
-    WebkitBackdropFilter: 'blur(14px)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '14px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
-};
-const TEXT_COLOR = '#e8ecf0';
+import styles from '@/components/editor/EditorWorkspace.module.css';
 
 // ── Component ──────────────────────────────────────────────
 export default function Playground() {
@@ -30,14 +22,15 @@ export default function Playground() {
     const [lighting, setLighting] = useState(DEFAULT_LIGHTING);
     const [currentTime, setCurrentTime] = useState(DEFAULT_LIGHTING.time);
     const [history, setHistory] = useState({ canUndo: false, canRedo: false });
+    const [showGrid, setShowGrid] = useState(true);
     const resetFnRef = useRef<(() => void) | null>(null);
     const planeRef   = useRef<IsometricPlaneHandle>(null);
     const [localSaveStatus, setLocalSaveStatus] = useState('Autosave on');
-    const sessionRef = useRef<Omit<LocalSession, 'voxels'>>({ activeTool, activeColor, activeBlock, glowColor, lighting });
+    const sessionRef = useRef<Omit<LocalSession, 'voxels'>>({ activeTool, activeColor, activeBlock, glowColor, lighting, showGrid });
 
     useEffect(() => {
-        sessionRef.current = { activeTool, activeColor, activeBlock, glowColor, lighting: { ...lighting, time: currentTime } };
-    }, [activeTool, activeColor, activeBlock, glowColor, lighting, currentTime]);
+        sessionRef.current = { activeTool, activeColor, activeBlock, glowColor, lighting: { ...lighting, time: currentTime }, showGrid };
+    }, [activeTool, activeColor, activeBlock, glowColor, lighting, currentTime, showGrid]);
 
     useEffect(() => {
         const save = () => {
@@ -63,25 +56,6 @@ export default function Playground() {
     const handleUndo = useCallback(() => planeRef.current?.undo(), []);
     const handleRedo = useCallback(() => planeRef.current?.redo(), []);
 
-    useEffect(() => {
-        const handleHistoryKey = (event: KeyboardEvent) => {
-            if (event.defaultPrevented || event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey)) return;
-            // Keep native undo available in text fields, color inputs, and other controls.
-            if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
-            const key = event.key.toLowerCase();
-            if (key === 'z') {
-                event.preventDefault();
-                if (event.shiftKey) handleRedo();
-                else handleUndo();
-            } else if (key === 'y' && !event.shiftKey) {
-                event.preventDefault();
-                handleRedo();
-            }
-        };
-        window.addEventListener('keydown', handleHistoryKey);
-        return () => window.removeEventListener('keydown', handleHistoryKey);
-    }, [handleUndo, handleRedo]);
-
     const handleBlockSelect = useCallback((type: BlockType) => {
         setActiveBlock(type);
         if (type === 'glow') {
@@ -90,7 +64,7 @@ export default function Playground() {
             const block = BLOCKS.find(block => block.id === type);
             if (block) setActiveColor(block.color);
         }
-        setActiveTool('draw');
+        setActiveTool(current => current === 'paint' || current === 'fill' ? current : 'draw');
     }, [glowColor]);
 
     const handleColorChange = useCallback((color: string) => {
@@ -103,8 +77,16 @@ export default function Playground() {
         setGlowColor(color);
         setActiveColor(color);
         setActiveBlock('glow');
+        setActiveTool(current => current === 'paint' || current === 'fill' ? current : 'draw');
+    }, []);
+
+    const handlePick = useCallback((voxel: VoxelData) => {
+        setActiveBlock(voxel.blockType ?? 'custom');
+        setActiveColor(voxel.color);
+        if (voxel.blockType === 'glow') setGlowColor(voxel.color);
         setActiveTool('draw');
     }, []);
+    const handleToggleGrid = useCallback(() => setShowGrid(value => !value), []);
 
     const handleLightingChange = useCallback((settings: LightingSettings) => {
         setLighting(settings);
@@ -123,6 +105,7 @@ export default function Playground() {
             setGlowColor(session.glowColor);
             setLighting(session.lighting);
             setCurrentTime(session.lighting.time);
+            setShowGrid(session.showGrid ?? true);
             setLocalSaveStatus('Restored locally');
         } catch {
             setLocalSaveStatus('Local save unavailable');
@@ -175,8 +158,29 @@ export default function Playground() {
         if (confirm('Clear all voxels?')) planeRef.current?.clearScene();
     }, []);
 
+    useEffect(() => {
+        const handleShortcut = (event: KeyboardEvent) => {
+            if (event.defaultPrevented || event.isComposing || event.altKey || event.repeat) return;
+            if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+            const key = event.key.toLowerCase();
+            if (event.ctrlKey || event.metaKey) {
+                if (key === 'z') { event.preventDefault(); if (event.shiftKey) handleRedo(); else handleUndo(); }
+                else if (key === 'y') { event.preventDefault(); handleRedo(); }
+                else if (key === 's') { event.preventDefault(); handleSave(); }
+                return;
+            }
+            if (event.shiftKey) return;
+            const tool = TOOLS.find(item => item.key.toLowerCase() === key);
+            if (tool) { event.preventDefault(); setActiveTool(tool.id); }
+            else if (key === 'g') { event.preventDefault(); handleToggleGrid(); }
+            else if (key === 'r') { event.preventDefault(); handleResetView(); }
+        };
+        window.addEventListener('keydown', handleShortcut);
+        return () => window.removeEventListener('keydown', handleShortcut);
+    }, [handleUndo, handleRedo, handleSave, handleToggleGrid, handleResetView]);
+
     return (
-        <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden', fontFamily: 'var(--font-geist-sans), system-ui, sans-serif' }}>
 
             {/* 3D Viewport */}
             <div style={{ position: 'absolute', inset: 0 }}>
@@ -189,6 +193,8 @@ export default function Playground() {
                     lighting={lighting}
                     onTimeChange={setCurrentTime}
                     onHistoryChange={setHistory}
+                    onPick={handlePick}
+                    showGrid={showGrid}
                 />
             </div>
 
@@ -207,91 +213,30 @@ export default function Playground() {
                 canRedo={history.canRedo}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
+                showGrid={showGrid}
+                onToggleGrid={handleToggleGrid}
+                onSave={handleSave}
+                onLoad={handleLoad}
+                onClear={handleClear}
+                saveStatus={localSaveStatus}
             />
-
-            {/* Top-right — Save / Load / Clear */}
-            <div style={{
-                position: 'absolute', top: '16px', right: '16px',
-                display: 'flex', gap: '8px',
-            }}>
-                <SceneBtn id="btn-save" onClick={handleSave} color="#00b4ff" title="Save scene to .nzs file">
-                    <SaveIcon /> Save
-                </SceneBtn>
-                <SceneBtn id="btn-load" onClick={handleLoad} color="#a78bfa" title="Load .nzs scene file">
-                    <LoadIcon /> Load
-                </SceneBtn>
-                <SceneBtn id="btn-clear" onClick={handleClear} color="#ff5555" title="Clear all voxels">
-                    <TrashIcon /> Clear
-                </SceneBtn>
-            </div>
-
-            <span role="status" style={{ position: 'absolute', top: 51, right: 16, color: TEXT_COLOR, fontSize: 10 }}>
-                {localSaveStatus}
-            </span>
 
             {/* Bottom Status Bar */}
             <LightingControls settings={lighting} currentTime={currentTime} onChange={handleLightingChange} />
 
-            <div style={{
-                position: 'absolute', bottom: '16px', left: '50%',
-                transform: 'translateX(-50%)',
-                display: 'flex', alignItems: 'center', gap: '16px',
-                padding: '7px 18px',
-                ...GLASS,
-                borderRadius: '10px',
-            }}>
+            <div className={styles.statusBar} style={GLASS} role="group" aria-label="Editor status">
                 <StatusItem label="Tool" value={TOOLS.find(tool => tool.id === activeTool)?.label ?? ''} />
                 <StatusDot />
                 <StatusItem label="Color" value={activeColor.toUpperCase()} />
                 <StatusDot />
                 <StatusItem label="Block" value={BLOCKS.find(block => block.id === activeBlock)?.label ?? ''} />
-                <StatusDot />
-                <StatusItem label="Mode" value="Isometric" />
+                <span className={styles.modeStatus}><StatusDot /><StatusItem label="Mode" value="Isometric" /></span>
             </div>
         </div>
     );
 }
 
 // ── Sub-components ─────────────────────────────────────────
-
-function SceneBtn({ children, onClick, color, title, id }: {
-    children: React.ReactNode;
-    onClick: () => void;
-    color: string;
-    title: string;
-    id: string;
-}) {
-    const [hovered, setHovered] = useState(false);
-    return (
-        <button
-            id={id}
-            onClick={onClick}
-            title={title}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '7px 14px',
-                background: hovered ? `${color}18` : 'rgba(10, 14, 20, 0.65)',
-                backdropFilter: 'blur(14px)',
-                WebkitBackdropFilter: 'blur(14px)',
-                border: `1px solid ${hovered ? color + 'bb' : color + '33'}`,
-                borderRadius: '10px',
-                color: hovered ? '#ffffff' : color,
-                fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
-                cursor: 'pointer',
-                outline: 'none',
-                transition: 'background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s',
-                boxShadow: hovered
-                    ? `0 0 12px ${color}55, 0 4px 20px rgba(0,0,0,0.4)`
-                    : '0 2px 10px rgba(0,0,0,0.3)',
-                transform: hovered ? 'translateY(-1px) scale(1.04)' : 'translateY(0) scale(1)',
-            }}
-        >
-            {children}
-        </button>
-    );
-}
 
 function StatusDot() {
     return <div style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'rgba(255,255,255,0.25)' }} />;
@@ -305,20 +250,3 @@ function StatusItem({ label, value }: { label: string; value: string }) {
         </span>
     );
 }
-
-// ── Icons ──────────────────────────────────────────────────
-const SaveIcon = () => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-    </svg>
-);
-const LoadIcon = () => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-);
-const TrashIcon = () => (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-    </svg>
-);

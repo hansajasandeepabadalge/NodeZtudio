@@ -1,0 +1,18 @@
+.statusBar {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    max-width: calc(100vw - 110px);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 9px 14px;
+    border-radius: 10px;
+    z-index: 2;
+}
+.modeStatus { display: flex; align-items: center; gap: 12px; }
+@media (max-width: 760px) {
+    .statusBar { bottom: 10px; right: 10px; gap: 8px; padding: 9px 11px; }
+    .modeStatus { display: none; }
+}
