@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 export const GRID_SIZE     = 20;
 export const FRUSTUM_SIZE  = 20;
 export const LERP_SPEED    = 0.05;
-export const DEFAULT_COLOR = '#3498db';
+export const DEFAULT_COLOR = '#95704b';
 
 // ── UI Color tokens ────────────────────────────────────────
 export const TEXT_COLOR = '#e8ecf0';
@@ -21,8 +21,8 @@ export const GLASS: CSSProperties = {
 
 // ── Color palette ──────────────────────────────────────────
 export const PALETTE = [
-    '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71',
-    '#1abc9c', '#3498db', '#9b59b6', '#e91e63',
-    '#ffffff', '#bdc3c7', '#7f8c8d', '#2c3e50',
-    '#795548', '#ff7043', '#26c6da', '#66bb6a',
+    '#ede5d3', '#c5bca7', '#92958c', '#5d625b',
+    '#c69b64', '#95704b', '#705038', '#44372c',
+    '#819b43', '#5f7d32', '#3d5b2c', '#b2b86a',
+    '#ac5e43', '#d0a34f', '#71999b', '#383c39',
 ];

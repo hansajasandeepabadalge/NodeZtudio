@@ -8,7 +8,7 @@ export const DEFAULT_TARGET = new THREE.Vector3(0, 0, 0);
 /** Creates and returns a configured Three.js Scene. */
 export function createScene(): THREE.Scene {
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x00b4ff);
+    scene.background = new THREE.Color('#bdb299');
     return scene;
 }
 
@@ -16,7 +16,12 @@ export function createScene(): THREE.Scene {
 export function createRenderer(mount: HTMLDivElement): THREE.WebGLRenderer {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     return renderer;
 }
 

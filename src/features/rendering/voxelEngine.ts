@@ -251,8 +251,10 @@ export function createVoxelEngine(
                 }
 
                 const geo  = new THREE.BoxGeometry(1, 1, 1);
-                const mat  = new THREE.MeshLambertMaterial({ color: new THREE.Color(currentColor) });
+                const mat  = new THREE.MeshStandardMaterial({ color: new THREE.Color(currentColor), roughness: 1, metalness: 0 });
                 const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
                 mesh.position.copy(place);
                 scene.add(mesh);
                 voxels.set(key, mesh);
@@ -287,7 +289,7 @@ export function createVoxelEngine(
             const result: VoxelData[] = [];
             voxels.forEach((mesh, key) => {
                 const [x, y, z] = key.split(',').map(Number);
-                const mat = mesh.material as THREE.MeshLambertMaterial;
+                const mat = mesh.material as THREE.MeshStandardMaterial;
                 result.push({ x, y, z, color: '#' + mat.color.getHexString() });
             });
             return result;
@@ -306,8 +308,10 @@ export function createVoxelEngine(
             data.forEach(({ x, y, z, color }) => {
                 const key = cellKey(x, y, z);
                 const geo  = new THREE.BoxGeometry(1, 1, 1);
-                const mat  = new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
+                const mat  = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 1, metalness: 0 });
                 const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
                 mesh.position.set(x, y, z);
                 scene.add(mesh);
                 voxels.set(key, mesh);
