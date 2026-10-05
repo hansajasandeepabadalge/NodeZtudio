@@ -23,6 +23,10 @@ export function createBlockMaterials() {
             const texture = createTexture(kind);
             textures.set(kind, texture);
             material = new THREE.MeshStandardMaterial({ map: texture, roughness: 1, metalness: 0 });
+            if (kind === 'leaves_oak') {
+                material.alphaTest = 0.5;
+                material.side = THREE.DoubleSide;
+            }
             materials.set(kind, material);
         }
         return material;
@@ -30,7 +34,8 @@ export function createBlockMaterials() {
 
     return {
         get(type: BlockType, color: string): THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] {
-            if (type !== 'custom' && type !== 'glow') return blockFaces(type).map(texturedMaterial);
+            const faces = blockFaces(type);
+            if (faces) return faces.map(texturedMaterial);
             const key = `${type}:${color.toLowerCase()}`;
             let material = materials.get(key);
             if (!material) {

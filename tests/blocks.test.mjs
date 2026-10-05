@@ -20,6 +20,37 @@ registerHooks({
 const { createVoxelEngine } = await import('../src/features/rendering/voxelEngine.ts');
 const { createBlockMaterials } = await import('../src/features/rendering/blockMaterials.ts');
 const { MAX_BLOCK_LIGHTS } = await import('../src/features/rendering/blockLights.ts');
+const { addSceneLighting } = await import('../src/engine/core/lighting.ts');
+
+test('scene lighting crosses the other axis and keeps shaded faces lit across the cycle', () => {
+    const scene = new THREE.Scene();
+    const lighting = addSceneLighting(scene);
+    const sky = scene.children.find(child => child.isHemisphereLight);
+    const [sun, moon, fill] = scene.children.filter(child => child.isDirectionalLight);
+    try {
+        lighting.update(12, 1);
+        assert.ok(sun.position.x > 0 && sun.position.z > 0, 'midday sun must follow the rotated orbit');
+        assert.ok(sun.intensity > 0 && fill.intensity > 0);
+        const daylightFill = fill.intensity;
+        const daylightSky = sky.intensity;
+        lighting.update(6, 1);
+        assert.ok(sun.position.x > 0 && Math.abs(sun.position.z) < 0.001, 'sunrise must start along positive X');
+        lighting.update(18, 1);
+        assert.ok(sun.position.x < 0 && Math.abs(sun.position.z) < 0.001, 'sunset must end along negative X');
+        lighting.update(0, 1);
+        assert.equal(sun.intensity, 0);
+        assert.ok(moon.intensity > 0 && moon.position.y > 3);
+        assert.equal(moon.position.x, -sun.position.x);
+        assert.equal(moon.position.z, -sun.position.z);
+        assert.ok(fill.intensity > 0 && fill.intensity < daylightFill);
+        assert.ok(sky.intensity > 0 && sky.intensity < daylightSky);
+        lighting.update(12, 2);
+        assert.equal(fill.intensity, daylightFill * 2, 'brightness must also scale the fill');
+    } finally {
+        lighting.dispose();
+    }
+    assert.equal(scene.children.length, 0, 'disposing must remove the new fill light too');
+});
 
 // Image loading requires a browser; retain the requested URL for material assertions.
 mock.method(THREE.TextureLoader.prototype, 'load', url => new THREE.Texture({ src: url }));
@@ -48,6 +79,45 @@ test('grass and logs have the correct top, side, and bottom textures', () => {
     assert.equal(blockFaces('log')[2], 'log_oak_top');
     assert.equal(blockFaces('log')[3], 'log_oak_top');
     assert.equal(blockFaces('log')[4], 'log_oak');
+});
+
+test('oak leaves use a shared cutout texture on every face', () => {
+    assert.deepEqual(blockFaces('leaves'), Array(6).fill('leaves_oak'));
+    const library = createBlockMaterials();
+    try {
+        const faces = library.get('leaves', '#6b9f43');
+        assert.ok(faces.every(material => material === faces[0]));
+        assert.equal(faces[0].map.image.src, '/textures/leaves_oak.png');
+        assert.equal(faces[0].alphaTest, 0.5);
+        assert.equal(faces[0].side, THREE.DoubleSide);
+        assert.equal(faces[0].transparent, false, 'cutout foliage should keep depth writing and avoid sorting artifacts');
+    } finally { library.dispose(); }
+});
+
+test('stale block selections cannot crash placement or save an invalid block type', () => {
+    const { engine, scene, listeners } = setup();
+    const library = createBlockMaterials();
+    try {
+        for (const type of ['old-block', undefined, 'toString', 'custom', 'glow']) {
+            assert.equal(blockFaces(type), undefined);
+            assert.ok(library.get(type, '#123456').isMeshStandardMaterial);
+        }
+        engine.setMode('draw');
+        engine.setBlockType('old-block');
+        scene.updateMatrixWorld();
+        assert.doesNotThrow(() => listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 }));
+        assert.equal(engine.exportScene()[0].blockType, 'custom');
+        engine.setBlockType('leaves');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        assert.equal(engine.exportScene()[1].blockType, 'leaves');
+        engine.undo();
+        engine.redo();
+        assert.equal(engine.exportScene()[1].blockType, 'leaves');
+    } finally {
+        library.dispose();
+        engine.dispose();
+    }
 });
 
 test('typed and legacy solid-color blocks survive JSON save/load', () => {

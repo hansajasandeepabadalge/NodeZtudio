@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import { daylightAt, wrapTime } from '@/features/rendering/dayNight';
 
-/** Warm daylight and a matte ground for the miniature diorama look. */
+/** Balanced daylight and soft fill keep pixel textures visible on shaded faces. */
 export function addSceneLighting(scene: THREE.Scene) {
-    const sky = new THREE.HemisphereLight('#e7efff', '#82704f', 1.1);
-    const sun = new THREE.DirectionalLight('#fff0d2', 3);
-    sun.position.set(-18, 30, 12);
+    const sky = new THREE.HemisphereLight('#f2f6ff', '#a9a298', 1.4);
+    const sun = new THREE.DirectionalLight('#fff8ec', 2.2);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, {
@@ -25,17 +24,20 @@ export function addSceneLighting(scene: THREE.Scene) {
     ground.receiveShadow = true;
 
     const moon = new THREE.DirectionalLight('#9ebaff', 0.35);
-    moon.position.set(18, 25, -12);
+    const fill = new THREE.DirectionalLight('#eef3ff', 0.65);
+    fill.position.set(-24, 18, 24);
     const nightSky = new THREE.Color('#101a30');
     const daySky = new THREE.Color('#bdb299');
     const sunsetSky = new THREE.Color('#b78169');
-    const nightFill = new THREE.Color('#748bb6');
-    const dayFill = new THREE.Color('#e7efff');
+    const nightFill = new THREE.Color('#96abd0');
+    const dayFill = new THREE.Color('#f2f6ff');
+    const nightBounce = new THREE.Color('#8396ba');
+    const dayBounce = new THREE.Color('#eef3ff');
     const warmSun = new THREE.Color('#ffad66');
-    const noonSun = new THREE.Color('#fff0d2');
+    const noonSun = new THREE.Color('#fff8ec');
     const background = new THREE.Color();
     scene.background = background;
-    scene.add(sky, sun, moon, ground);
+    scene.add(sky, sun, moon, fill, ground);
 
     const update = (time: number, brightness: number) => {
         const angle = (wrapTime(time) - 6) / 24 * Math.PI * 2;
@@ -45,16 +47,20 @@ export function addSceneLighting(scene: THREE.Scene) {
         const strength = Math.max(0.25, Math.min(2, brightness));
         background.copy(nightSky).lerp(daySky, daylight).lerp(sunsetSky, twilight * 0.6);
         sky.color.copy(nightFill).lerp(dayFill, daylight);
-        sky.intensity = (0.32 + daylight * 0.78) * strength;
+        sky.intensity = (0.45 + daylight * 0.95) * strength;
+        fill.color.copy(nightBounce).lerp(dayBounce, daylight);
+        fill.intensity = (0.18 + daylight * 0.47) * strength;
         sun.color.copy(warmSun).lerp(noonSun, Math.max(0, elevation));
-        sun.intensity = 3 * daylight * strength;
-        sun.position.set(-18 * Math.sin(angle), Math.max(3, elevation * 30), 28 * Math.cos(angle) + 12);
-        moon.intensity = 0.35 * (1 - daylight) * strength;
+        sun.intensity = 2.2 * daylight * strength;
+        // Rotate the original orbit 90 degrees: sunrise and sunset now cross the X axis.
+        sun.position.set(28 * Math.cos(angle) + 12, Math.max(3, elevation * 30), 18 * Math.sin(angle));
+        moon.position.set(-sun.position.x, Math.max(3, -elevation * 25), -sun.position.z);
+        moon.intensity = 0.45 * (1 - daylight) * strength;
     };
     update(12, 1);
 
     const dispose = () => {
-        scene.remove(sky, sun, moon, ground);
+        scene.remove(sky, sun, moon, fill, ground);
         sun.shadow.dispose();
         ground.geometry.dispose();
         ground.material.dispose();

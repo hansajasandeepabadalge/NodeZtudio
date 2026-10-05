@@ -17,11 +17,13 @@ function BlockPreview({ type, color }: { type: BlockType; color: string }) {
         <svg aria-hidden="true" width="48" height="44" viewBox="0 0 48 44"
             style={{ overflow: 'visible', filter: emission ? `drop-shadow(0 0 3px ${emission.color}66)` : undefined }}>
             <g transform="matrix(1 .5 -1 .5 24 2)"><Face kind={faces?.[2]} color={color} /></g>
-            <g transform="matrix(1 .5 0 1.25 8 10)">
-                <Face kind={faces?.[4]} color={color} /><path fill="#000" opacity=".12" d="M0 0h16v16H0z" />
+            <g transform="matrix(1 .5 0 1.25 8 10)" style={type === 'leaves' ? { filter: 'brightness(0.88)' } : undefined}>
+                <Face kind={faces?.[4]} color={color} />
+                {type !== 'leaves' && <path fill="#000" opacity=".12" d="M0 0h16v16H0z" />}
             </g>
-            <g transform="matrix(1 -.5 0 1.25 24 18)">
-                <Face kind={faces?.[0]} color={color} /><path fill="#000" opacity=".25" d="M0 0h16v16H0z" />
+            <g transform="matrix(1 -.5 0 1.25 24 18)" style={type === 'leaves' ? { filter: 'brightness(0.75)' } : undefined}>
+                <Face kind={faces?.[0]} color={color} />
+                {type !== 'leaves' && <path fill="#000" opacity=".25" d="M0 0h16v16H0z" />}
             </g>
         </svg>
     );

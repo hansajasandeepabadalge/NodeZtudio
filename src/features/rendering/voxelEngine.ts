@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { createBlockMaterials } from './blockMaterials';
 import { createBlockLights } from './blockLights';
-import { parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
+import { isBlockType, parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
 
 export type { VoxelData } from '@/features/voxel/blocks';
 
@@ -53,7 +53,7 @@ export function createVoxelEngine(
 
     // ── Shared State ─────────────────────────────────────────
     let currentColor = initialColor;
-    let currentBlockType = initialBlockType;
+    let currentBlockType: BlockType = isBlockType(initialBlockType) ? initialBlockType : 'custom';
     const blockMaterials = createBlockMaterials();
     const blockLights = createBlockLights(scene);
     let currentMode: 'draw' | 'erase' | 'select' | 'fill' = 'select';
@@ -350,7 +350,7 @@ export function createVoxelEngine(
             hoverMat.color.copy(c);
         },
         setBlockType(type: BlockType) {
-            currentBlockType = type;
+            currentBlockType = isBlockType(type) ? type : 'custom';
         },
         setMode(mode: 'draw' | 'erase' | 'select' | 'fill') {
             currentMode = mode;
