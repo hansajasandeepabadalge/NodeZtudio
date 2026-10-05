@@ -4,6 +4,7 @@ import { useRef, useCallback, useState } from 'react';
 import IsometricPlane from '@/features/rendering/IsometricPlane';
 import type { IsometricPlaneHandle } from '@/features/rendering/IsometricPlane';
 import Sidebar, { TOOLS, type Tool } from '@/components/editor/Sidebar';
+import { DEFAULT_COLOR } from '@/utils/constants';
 
 // ── Style tokens ───────────────────────────────────────────
 const GLASS: React.CSSProperties = {
@@ -19,7 +20,7 @@ const TEXT_COLOR = '#e8ecf0';
 // ── Component ──────────────────────────────────────────────
 export default function Playground() {
     const [activeTool, setActiveTool] = useState<Tool>('select');
-    const [activeColor, setActiveColor] = useState<string>('#795548');
+    const [activeColor, setActiveColor] = useState<string>(DEFAULT_COLOR);
     const resetFnRef = useRef<(() => void) | null>(null);
     const planeRef   = useRef<IsometricPlaneHandle>(null);
 

@@ -10,6 +10,7 @@ import { addSceneLighting } from '@/engine/core/lighting';
 import { createVoxelEngine } from '@/features/rendering/voxelEngine';
 import type { VoxelData } from '@/features/rendering/voxelEngine';
 import type { Tool } from '@/types/tools';
+import { DEFAULT_COLOR } from '@/utils/constants';
 
 const LERP_SPEED = 0.05;
 const GRID_SIZE  = 20;
@@ -28,7 +29,7 @@ interface IsometricPlaneProps {
 
 const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(function IsometricPlane({
     onResetReady,
-    activeColor = '#795548',
+    activeColor = DEFAULT_COLOR,
     activeTool  = 'select',
 }, ref) {
     const mountRef     = useRef<HTMLDivElement>(null);
@@ -81,7 +82,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         const controls = createOrbitControls(camera, renderer.domElement);
         controlsRef.current = controls;
 
-        addSceneLighting(scene);
+        const disposeLighting = addSceneLighting(scene);
         scene.add(createGridHelper(GRID_SIZE));
         scene.add(createAxisLines(GRID_SIZE));
 
@@ -145,6 +146,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             engineRef.current = null;
             controlsRef.current = null;
             controls.dispose();
+            disposeLighting();
             mount.removeChild(renderer.domElement);
             renderer.dispose();
         };
