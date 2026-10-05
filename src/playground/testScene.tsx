@@ -8,6 +8,7 @@ import { DEFAULT_COLOR } from '@/utils/constants';
 import LightingControls from '@/components/editor/LightingControls';
 import { BLOCKS, DEFAULT_GLOW_COLOR, type BlockType } from '@/features/voxel/blocks';
 import { DEFAULT_LIGHTING, type LightingSettings } from '@/features/rendering/dayNight';
+import { AUTOSAVE_INTERVAL_MS, readLocalSession, saveLocalSession, type LocalSession } from '@/features/voxel/localSession';
 
 // ── Style tokens ───────────────────────────────────────────
 const GLASS: React.CSSProperties = {
@@ -31,6 +32,33 @@ export default function Playground() {
     const [history, setHistory] = useState({ canUndo: false, canRedo: false });
     const resetFnRef = useRef<(() => void) | null>(null);
     const planeRef   = useRef<IsometricPlaneHandle>(null);
+    const [localSaveStatus, setLocalSaveStatus] = useState('Autosave on');
+    const sessionRef = useRef<Omit<LocalSession, 'voxels'>>({ activeTool, activeColor, activeBlock, glowColor, lighting });
+
+    useEffect(() => {
+        sessionRef.current = { activeTool, activeColor, activeBlock, glowColor, lighting: { ...lighting, time: currentTime } };
+    }, [activeTool, activeColor, activeBlock, glowColor, lighting, currentTime]);
+
+    useEffect(() => {
+        const save = () => {
+            if (!planeRef.current?.isReady()) return;
+            try {
+                const saved = saveLocalSession(window.localStorage, { ...sessionRef.current, voxels: planeRef.current.exportScene() });
+                setLocalSaveStatus(saved ? 'Saved locally' : 'Local save unavailable');
+            } catch {
+                setLocalSaveStatus('Local save unavailable');
+            }
+        };
+        const onVisibilityChange = () => { if (document.hidden) save(); };
+        const timer = window.setInterval(save, AUTOSAVE_INTERVAL_MS);
+        window.addEventListener('pagehide', save);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            window.clearInterval(timer);
+            window.removeEventListener('pagehide', save);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
+    }, []);
 
     const handleUndo = useCallback(() => planeRef.current?.undo(), []);
     const handleRedo = useCallback(() => planeRef.current?.redo(), []);
@@ -85,6 +113,20 @@ export default function Playground() {
 
     const handleResetReady = useCallback((resetCallback: () => void) => {
         resetFnRef.current = resetCallback;
+        try {
+            const session = readLocalSession(window.localStorage);
+            if (!session) return;
+            planeRef.current?.importScene(session.voxels);
+            setActiveTool(session.activeTool);
+            setActiveBlock(session.activeBlock);
+            setActiveColor(session.activeColor);
+            setGlowColor(session.glowColor);
+            setLighting(session.lighting);
+            setCurrentTime(session.lighting.time);
+            setLocalSaveStatus('Restored locally');
+        } catch {
+            setLocalSaveStatus('Local save unavailable');
+        }
     }, []);
 
     const handleResetView = useCallback(() => {
@@ -182,6 +224,10 @@ export default function Playground() {
                     <TrashIcon /> Clear
                 </SceneBtn>
             </div>
+
+            <span role="status" style={{ position: 'absolute', top: 51, right: 16, color: TEXT_COLOR, fontSize: 10 }}>
+                {localSaveStatus}
+            </span>
 
             {/* Bottom Status Bar */}
             <LightingControls settings={lighting} currentTime={currentTime} onChange={handleLightingChange} />

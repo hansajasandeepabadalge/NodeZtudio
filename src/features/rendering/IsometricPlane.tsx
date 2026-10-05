@@ -19,6 +19,7 @@ const LERP_SPEED = 0.05;
 const GRID_SIZE  = 30;
 
 export interface IsometricPlaneHandle {
+    isReady(): boolean;
     exportScene(): VoxelData[];
     importScene(data: VoxelData[]): void;
     clearScene(): void;
@@ -70,6 +71,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
 
     // ── Expose save/load API to parent ─────────────────────
     useImperativeHandle(ref, () => ({
+        isReady: () => engineRef.current !== null,
         exportScene: () => engineRef.current?.exportScene() ?? [],
         importScene: (data) => engineRef.current?.importScene(data),
         clearScene:  () => engineRef.current?.clearScene(),
@@ -97,10 +99,10 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
                 controlsRef.current.mouseButtons.RIGHT = THREE.MOUSE.PAN;
                 controlsRef.current.touches.ONE = THREE.TOUCH.ROTATE;
             } else {
-                controlsRef.current.mouseButtons.LEFT = null as any;
+                controlsRef.current.mouseButtons.LEFT = null;
                 controlsRef.current.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE; // Middle-click rotates
-                controlsRef.current.mouseButtons.RIGHT = null as any; // Right-click unmapped (used for deleting)
-                controlsRef.current.touches.ONE = null as any;
+                controlsRef.current.mouseButtons.RIGHT = null; // Right-click unmapped (used for deleting)
+                controlsRef.current.touches.ONE = null;
             }
         }
         engineRef.current?.setMode(activeTool);
