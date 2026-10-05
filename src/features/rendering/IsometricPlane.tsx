@@ -11,6 +11,7 @@ import { createVoxelEngine } from '@/features/rendering/voxelEngine';
 import type { VoxelData } from '@/features/rendering/voxelEngine';
 import type { Tool } from '@/types/tools';
 import { DEFAULT_COLOR } from '@/utils/constants';
+import { advanceTime, DEFAULT_LIGHTING, type LightingSettings } from './dayNight';
 
 const LERP_SPEED = 0.05;
 const GRID_SIZE  = 20;
@@ -25,17 +26,33 @@ interface IsometricPlaneProps {
     onResetReady?: (reset: () => void) => void;
     activeColor?: string;
     activeTool?: Tool;
+    lighting?: LightingSettings;
+    onTimeChange?: (time: number) => void;
 }
 
 const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(function IsometricPlane({
     onResetReady,
     activeColor = DEFAULT_COLOR,
     activeTool  = 'select',
+    lighting = DEFAULT_LIGHTING,
+    onTimeChange,
 }, ref) {
     const mountRef     = useRef<HTMLDivElement>(null);
     const engineRef    = useRef<ReturnType<typeof createVoxelEngine> | null>(null);
     const controlsRef  = useRef<OrbitControls | null>(null);
     const toolRef      = useRef(activeTool);
+    const lightingRef = useRef(lighting);
+    const timeRef = useRef(lighting.time);
+    const onTimeChangeRef = useRef(onTimeChange);
+
+    useEffect(() => {
+        lightingRef.current = lighting;
+        onTimeChangeRef.current = onTimeChange;
+    }, [lighting, onTimeChange]);
+
+    useEffect(() => {
+        timeRef.current = lighting.time;
+    }, [lighting.time, lighting.automatic]);
 
     // ── Expose save/load API to parent ─────────────────────
     useImperativeHandle(ref, () => ({
@@ -82,7 +99,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         const controls = createOrbitControls(camera, renderer.domElement);
         controlsRef.current = controls;
 
-        const disposeLighting = addSceneLighting(scene);
+        const sceneLighting = addSceneLighting(scene);
         scene.add(createGridHelper(GRID_SIZE));
         scene.add(createAxisLines(GRID_SIZE));
 
@@ -99,8 +116,20 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
 
         // ── Render loop ────────────────────────────────────
         let animFrameId: number;
+        let previousTime = performance.now();
+        let lastTimeReport = 0;
         const animate = () => {
             animFrameId = requestAnimationFrame(animate);
+            const now = performance.now();
+            // Pause while the tab is hidden; avoid jumping ahead when it returns.
+            const delta = document.hidden ? 0 : Math.min((now - previousTime) / 1000, 0.1);
+            previousTime = now;
+            timeRef.current = advanceTime(timeRef.current, delta, lightingRef.current);
+            sceneLighting.update(timeRef.current, lightingRef.current.brightness);
+            if (now - lastTimeReport >= 250) {
+                onTimeChangeRef.current?.(timeRef.current);
+                lastTimeReport = now;
+            }
 
             if (isResetting) {
                 camera.position.lerp(DEFAULT_POS, LERP_SPEED);
@@ -146,7 +175,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             engineRef.current = null;
             controlsRef.current = null;
             controls.dispose();
-            disposeLighting();
+            sceneLighting.dispose();
             mount.removeChild(renderer.domElement);
             renderer.dispose();
         };

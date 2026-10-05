@@ -5,6 +5,8 @@ import IsometricPlane from '@/features/rendering/IsometricPlane';
 import type { IsometricPlaneHandle } from '@/features/rendering/IsometricPlane';
 import Sidebar, { TOOLS, type Tool } from '@/components/editor/Sidebar';
 import { DEFAULT_COLOR } from '@/utils/constants';
+import LightingControls from '@/components/editor/LightingControls';
+import { DEFAULT_LIGHTING, type LightingSettings } from '@/features/rendering/dayNight';
 
 // ── Style tokens ───────────────────────────────────────────
 const GLASS: React.CSSProperties = {
@@ -21,8 +23,15 @@ const TEXT_COLOR = '#e8ecf0';
 export default function Playground() {
     const [activeTool, setActiveTool] = useState<Tool>('select');
     const [activeColor, setActiveColor] = useState<string>(DEFAULT_COLOR);
+    const [lighting, setLighting] = useState(DEFAULT_LIGHTING);
+    const [currentTime, setCurrentTime] = useState(DEFAULT_LIGHTING.time);
     const resetFnRef = useRef<(() => void) | null>(null);
     const planeRef   = useRef<IsometricPlaneHandle>(null);
+
+    const handleLightingChange = useCallback((settings: LightingSettings) => {
+        setLighting(settings);
+        if (!settings.automatic) setCurrentTime(settings.time);
+    }, []);
 
     const handleResetReady = useCallback((resetCallback: () => void) => {
         resetFnRef.current = resetCallback;
@@ -84,6 +93,8 @@ export default function Playground() {
                     onResetReady={handleResetReady}
                     activeColor={activeColor}
                     activeTool={activeTool}
+                    lighting={lighting}
+                    onTimeChange={setCurrentTime}
                 />
             </div>
 
@@ -113,6 +124,8 @@ export default function Playground() {
             </div>
 
             {/* Bottom Status Bar */}
+            <LightingControls settings={lighting} currentTime={currentTime} onChange={handleLightingChange} />
+
             <div style={{
                 position: 'absolute', bottom: '16px', left: '50%',
                 transform: 'translateX(-50%)',
