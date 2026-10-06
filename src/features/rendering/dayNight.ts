@@ -6,7 +6,7 @@ export interface LightingSettings {
 }
 
 export const DEFAULT_LIGHTING: LightingSettings = {
-    automatic: true,
+    automatic: false,
     time: 12,
     cycleSeconds: 240,
     brightness: 1,
