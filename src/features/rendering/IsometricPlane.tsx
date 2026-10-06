@@ -10,13 +10,12 @@ import { addSceneLighting } from '@/engine/core/lighting';
 import {createVoxelEngine, HistoryState} from '@/features/rendering/voxelEngine';
 import type { VoxelData } from '@/features/rendering/voxelEngine';
 import type { Tool } from '@/types/tools';
-import { DEFAULT_COLOR } from '@/utils/constants';
+import { DEFAULT_COLOR, GRID_SIZE } from '@/utils/constants';
 import type { BlockType } from '@/features/voxel/blocks';
 import { advanceTime, DEFAULT_LIGHTING, type LightingSettings } from './dayNight';
 import { createPostProcessing } from './postProcessing';
 
 const LERP_SPEED = 0.05;
-const GRID_SIZE  = 30;
 
 export interface IsometricPlaneHandle {
     isReady(): boolean;

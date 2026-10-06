@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 
-export const GRID_SIZE     = 20;
+// Shared by the visible grid, hover raycasts, and block placement bounds.
+export const GRID_SIZE     = 30;
 export const FRUSTUM_SIZE  = 20;
 export const LERP_SPEED    = 0.05;
 export const DEFAULT_COLOR = '#95704b';

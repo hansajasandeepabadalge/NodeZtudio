@@ -11,10 +11,10 @@ import { createBlockMaterials } from './blockMaterials';
 import { createBlockLights } from './blockLights';
 import { isBlockType, parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
 import type { Tool } from '@/types/tools';
+import { GRID_SIZE } from '@/utils/constants';
 
 export type { VoxelData } from '@/features/voxel/blocks';
 
-const GRID_SIZE = 20;
 const HALF_GRID = GRID_SIZE / 2;
 const HISTORY_LIMIT = 100;
 

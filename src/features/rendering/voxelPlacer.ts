@@ -7,8 +7,8 @@
  */
 
 import * as THREE from 'three';
+import { GRID_SIZE } from '@/utils/constants';
 
-const GRID_SIZE = 20;
 const HALF_GRID = GRID_SIZE / 2;
 
 export interface VoxelPlacer {
