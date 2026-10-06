@@ -2,8 +2,8 @@ import { isBlockType, parseVoxels, type BlockType, type VoxelData } from './bloc
 import type { LightingSettings } from '../rendering/dayNight';
 import { isTool, type Tool } from '@/types/tools';
 
-export const LOCAL_SESSION_KEY = 'nodeztudio.session.v1';
-export const AUTOSAVE_INTERVAL_MS = 15_000;
+import { LOCAL_SESSION_KEY, SETTINGS } from '@/common/settings';
+export { LOCAL_SESSION_KEY, AUTOSAVE_INTERVAL_MS } from '@/common/settings';
 
 export interface LocalSession {
     voxels: VoxelData[];
@@ -24,15 +24,15 @@ export function readLocalSession(storage: Pick<Storage, 'getItem'>): LocalSessio
         const raw = storage.getItem(LOCAL_SESSION_KEY);
         if (!raw) return undefined;
         const data = JSON.parse(raw);
-        if (!data || data.version !== 1 || !isBlockType(data.activeBlock) ||
+        if (!data || data.version !== SETTINGS.storage.version || !isBlockType(data.activeBlock) ||
             !isTool(data.activeTool) ||
             (data.showGrid !== undefined && typeof data.showGrid !== 'boolean') ||
             !isColor(data.activeColor) || !isColor(data.glowColor)) return undefined;
         const lighting = data.lighting;
         if (!lighting || typeof lighting.automatic !== 'boolean' ||
-            !isFiniteNumber(lighting.time) || lighting.time < 0 || lighting.time >= 24 ||
-            !isFiniteNumber(lighting.cycleSeconds) || lighting.cycleSeconds < 1 ||
-            !isFiniteNumber(lighting.brightness) || lighting.brightness < 0.25 || lighting.brightness > 2) return undefined;
+            !isFiniteNumber(lighting.time) || lighting.time < 0 || lighting.time >= SETTINGS.lighting.hoursPerDay ||
+            !isFiniteNumber(lighting.cycleSeconds) || lighting.cycleSeconds < SETTINGS.lighting.minCycleSeconds ||
+            !isFiniteNumber(lighting.brightness) || lighting.brightness < SETTINGS.lighting.minBrightness || lighting.brightness > SETTINGS.lighting.maxBrightness) return undefined;
         return {
             voxels: parseVoxels(data.voxels), activeTool: data.activeTool, activeBlock: data.activeBlock,
             activeColor: data.activeColor, glowColor: data.glowColor,
@@ -46,7 +46,7 @@ export function readLocalSession(storage: Pick<Storage, 'getItem'>): LocalSessio
 
 export function saveLocalSession(storage: Pick<Storage, 'setItem'>, session: LocalSession): boolean {
     try {
-        storage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ ...session, version: 1, savedAt: Date.now() }));
+        storage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ ...session, version: SETTINGS.storage.version, savedAt: Date.now() }));
         return true;
     } catch {
         return false;

@@ -1,6 +1,26 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Shared settings and enums
+
+Edit `src/common/settings.ts` to change application defaults. `SETTINGS` groups the
+grid, camera, controls, renderer, editor, shortcuts, lighting, shadows, materials,
+hover previews, bloom, persistence, and UI colors. For example, change
+`SETTINGS.grid.size` to resize both the visible grid and the placement area.
+Camera position and target are plain coordinate tuples; the engine creates its
+own Three.js vectors from them.
+
+`src/common/enums.ts` defines `ToolId`, `BlockId`, `TextureId`, `SidebarPanel`,
+`ButtonVariant`, and `SaveStatus`. Tool, block, and texture values retain their
+existing strings so saved scenes remain compatible. Keep persistence keys and
+format versions stable unless implementing a save migration.
+
+Defaults apply when creating a scene or starting a fresh editor session. A saved
+local session restores the user's selected tool, colors, visibility, and lighting
+over those defaults. These are source settings; rebuild/reload after editing them.
+Existing exports from `utils/constants`, `dayNight`, and `localSession` remain
+available for compatibility. New code should import settings from `common/settings`.
+
+## Running locally
 
 First, run the development server:
 

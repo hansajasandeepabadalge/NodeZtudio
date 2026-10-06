@@ -1,5 +1,8 @@
 'use client';
 
+import { BlockId, SidebarPanel, SaveStatus } from '@/common/enums';
+import { SETTINGS } from '@/common/settings';
+
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import ColorPicker from './ColorPicker';
 import BlockPicker, { BlockPreview } from './BlockPicker';
@@ -28,18 +31,18 @@ interface SidebarProps {
     onSave: () => void;
     onLoad: () => void;
     onClear: () => void;
-    saveStatus: string;
+    saveStatus: SaveStatus;
 }
 
 export default function Sidebar(props: SidebarProps) {
-    const [panel, setPanel] = useState<'blocks' | 'colors' | null>(null);
+    const [panel, setPanel] = useState<SidebarPanel | null>(null);
     const panelId = useId();
     const colorPanelId = useId();
     const sidebarRef = useRef<HTMLElement>(null);
     const materialButton = useRef<HTMLButtonElement>(null);
     const colorButton = useRef<HTMLButtonElement>(null);
     const closePanel = () => {
-        (panel === 'colors' ? colorButton : materialButton).current?.focus();
+        (panel === SidebarPanel.Colors ? colorButton : materialButton).current?.focus();
         setPanel(null);
     };
     const block = BLOCKS.find(block => block.id === props.activeBlock);
@@ -56,7 +59,7 @@ export default function Sidebar(props: SidebarProps) {
     return <aside ref={sidebarRef} aria-label="Editor sidebar" className={styles.sidebar}
         onKeyDown={event => { if (event.key === 'Escape' && panel) { event.stopPropagation(); closePanel(); } }}>
         <header className={styles.header}>
-            <div className={styles.brandIcon} title="NodeZtudio"><EditorIcon name="cube" size={22} /></div>
+            <div className={styles.brandIcon} title={SETTINGS.app.title}><EditorIcon name="cube" size={22} /></div>
         </header>
         <div className={styles.body}>
             <Section title="Tools">
@@ -69,42 +72,42 @@ export default function Sidebar(props: SidebarProps) {
             </Section>
             <Section title="Material">
                 <button ref={materialButton} type="button" className={styles.materialButton} aria-label="Choose building material"
-                    aria-expanded={panel === 'blocks'} aria-controls={panelId} onClick={() => setPanel(value => value === 'blocks' ? null : 'blocks')} title={`Building blocks: ${block?.label ?? 'Custom Color'}`}>
-                    <BlockPreview type={props.activeBlock} color={props.activeBlock === 'glow' ? props.glowColor : props.activeColor} />
+                    aria-expanded={panel === SidebarPanel.Blocks} aria-controls={panelId} onClick={() => setPanel(value => value === SidebarPanel.Blocks ? null : SidebarPanel.Blocks)} title={`Building blocks: ${block?.label ?? 'Custom Color'}`}>
+                    <BlockPreview type={props.activeBlock} color={props.activeBlock === BlockId.Glow ? props.glowColor : props.activeColor} />
                 </button>
                 <button ref={colorButton} type="button" className={styles.colorButton} aria-label="Open color palette" title={`Paint color: ${props.activeColor.toUpperCase()}`}
-                    aria-expanded={panel === 'colors'} aria-controls={colorPanelId} onClick={() => setPanel(value => value === 'colors' ? null : 'colors')}>
+                    aria-expanded={panel === SidebarPanel.Colors} aria-controls={colorPanelId} onClick={() => setPanel(value => value === SidebarPanel.Colors ? null : SidebarPanel.Colors)}>
                     <span className={styles.colorSwatch} style={{ background: props.activeColor }} />
                 </button>
             </Section>
             <Section title="History">
                 <div className={styles.actionGrid}>
-                    <Action name="undo" label="Undo" shortcut="Ctrl/⌘ Z" disabled={!props.canUndo} onClick={props.onUndo} />
-                    <Action name="redo" label="Redo" shortcut="Ctrl/⌘ ⇧ Z" disabled={!props.canRedo} onClick={props.onRedo} />
+                    <Action name="undo" label="Undo" shortcut={`Ctrl/⌘ ${SETTINGS.shortcuts.undo}`} disabled={!props.canUndo} onClick={props.onUndo} />
+                    <Action name="redo" label="Redo" shortcut={`Ctrl/⌘ ⇧ ${SETTINGS.shortcuts.undo}`} disabled={!props.canRedo} onClick={props.onRedo} />
                 </div>
             </Section>
             <Section title="View">
                 <div className={styles.actionGrid}>
-                    <Action name="grid" label="Grid" shortcut="G" pressed={props.showGrid} onClick={props.onToggleGrid} />
-                    <Action name="reset" label="Reset view" shortcut="R" onClick={props.onResetView} />
+                    <Action name="grid" label="Grid" shortcut={SETTINGS.shortcuts.grid} pressed={props.showGrid} onClick={props.onToggleGrid} />
+                    <Action name="reset" label="Reset view" shortcut={SETTINGS.shortcuts.reset} onClick={props.onResetView} />
                 </div>
             </Section>
             <Section title="Scene">
                 <div className={styles.actionGrid}>
-                    <Action name="save" label="Save file" shortcut="Ctrl/⌘ S" onClick={props.onSave} />
+                    <Action name="save" label="Save file" shortcut={`Ctrl/⌘ ${SETTINGS.shortcuts.save}`} onClick={props.onSave} />
                     <Action name="load" label="Open file" onClick={props.onLoad} />
                 </div>
                 <Action name="clear" label="Clear scene" danger onClick={props.onClear} />
             </Section>
         </div>
-        {panel === 'blocks' && <div className={styles.library}><BlockPicker id={panelId} embedded activeBlock={props.activeBlock} activeColor={props.activeColor}
+        {panel === SidebarPanel.Blocks && <div className={styles.library}><BlockPicker id={panelId} embedded activeBlock={props.activeBlock} activeColor={props.activeColor}
             glowColor={props.glowColor} onSelect={props.onBlockSelect} onGlowColorChange={props.onGlowColorChange} onClose={closePanel} /></div>}
-        {panel === 'colors' && <section id={colorPanelId} aria-label="Paint colors" className={`${styles.library} ${styles.colorFlyout}`}>
+        {panel === SidebarPanel.Colors && <section id={colorPanelId} aria-label="Paint colors" className={`${styles.library} ${styles.colorFlyout}`}>
             <div className={styles.flyoutHeader}><strong>Paint color</strong><button type="button" aria-label="Close color palette" onClick={closePanel}><EditorIcon name="close" size={16} /></button></div>
             <ColorPicker activeColor={props.activeColor} onColorChange={props.onColorChange} />
         </section>}
         <footer className={styles.footer} title={props.saveStatus}>
-            <span className={styles.saveDot} data-error={props.saveStatus.includes('unavailable')} />
+            <span className={styles.saveDot} data-error={props.saveStatus === SaveStatus.Unavailable} />
             <span role="status" className={styles.srOnly}>{props.saveStatus}</span>
         </footer>
     </aside>;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "@/styles/globals.css";
+import { SETTINGS } from '@/common/settings';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NodeZtudio",
-  description: "Isometric voxel editor",
+  title: SETTINGS.app.title,
+  description: SETTINGS.app.description,
 };
 
 export default function RootLayout({

@@ -1,8 +1,10 @@
 'use client';
 
+import { BlockId } from '@/common/enums';
+
 import { memo } from 'react';
 import { BLOCKS, BLOCK_TEXTURE_URLS, blockFaces, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
-import { GLASS, TEXT_COLOR } from '@/utils/constants';
+import { GLASS, TEXT_COLOR } from '@/common/settings';
 
 function Face({ kind, color }: { kind?: TextureKind; color: string }) {
     const url = kind && BLOCK_TEXTURE_URLS[kind];
@@ -11,19 +13,19 @@ function Face({ kind, color }: { kind?: TextureKind; color: string }) {
 }
 
 export function BlockPreview({ type, color }: { type: BlockType; color: string }) {
-    const faces = type === 'custom' || type === 'glow' ? undefined : blockFaces(type);
+    const faces = type === BlockId.Custom || type === BlockId.Glow ? undefined : blockFaces(type);
     const emission = blockEmission(type, color);
     return (
         <svg aria-hidden="true" width="48" height="44" viewBox="0 0 48 44"
             style={{ overflow: 'visible', filter: emission ? `drop-shadow(0 0 3px ${emission.color}66)` : undefined }}>
             <g transform="matrix(1 .5 -1 .5 24 2)"><Face kind={faces?.[2]} color={color} /></g>
-            <g transform="matrix(1 .5 0 1.25 8 10)" style={type === 'leaves' ? { filter: 'brightness(0.88)' } : undefined}>
+            <g transform="matrix(1 .5 0 1.25 8 10)" style={type === BlockId.Leaves ? { filter: 'brightness(0.88)' } : undefined}>
                 <Face kind={faces?.[4]} color={color} />
-                {type !== 'leaves' && <path fill="#000" opacity=".12" d="M0 0h16v16H0z" />}
+                {type !== BlockId.Leaves && <path fill="#000" opacity=".12" d="M0 0h16v16H0z" />}
             </g>
-            <g transform="matrix(1 -.5 0 1.25 24 18)" style={type === 'leaves' ? { filter: 'brightness(0.75)' } : undefined}>
+            <g transform="matrix(1 -.5 0 1.25 24 18)" style={type === BlockId.Leaves ? { filter: 'brightness(0.75)' } : undefined}>
                 <Face kind={faces?.[0]} color={color} />
-                {type !== 'leaves' && <path fill="#000" opacity=".25" d="M0 0h16v16H0z" />}
+                {type !== BlockId.Leaves && <path fill="#000" opacity=".25" d="M0 0h16v16H0z" />}
             </g>
         </svg>
     );
@@ -62,7 +64,7 @@ const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, gl
                         <p style={{ fontSize: 10, opacity: 0.6, margin: '5px 0 0' }}>A solid glow in any color. Try the Night preset.</p>
                     </div>}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                        {BLOCKS.filter(block => (block.id === 'glow') === (group === 'Lights')).map(block => (
+                        {BLOCKS.filter(block => (block.id === BlockId.Glow) === (group === 'Lights')).map(block => (
                             <button key={block.id} type="button" title={block.description}
                                 aria-label={block.label} aria-pressed={activeBlock === block.id}
                                 onClick={() => onSelect(block.id)}
@@ -73,7 +75,7 @@ const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, gl
                                     border: `1px solid ${activeBlock === block.id ? '#d0a34f' : 'rgba(255,255,255,0.08)'}`,
                                     font: 'inherit', fontSize: 10,
                                 }}>
-                                <BlockPreview type={block.id} color={block.id === 'glow' ? glowColor : block.id === 'custom' ? activeColor : block.color} />
+                                <BlockPreview type={block.id} color={block.id === BlockId.Glow ? glowColor : block.id === BlockId.Custom ? activeColor : block.color} />
                                 {block.label}
                             </button>
                         ))}

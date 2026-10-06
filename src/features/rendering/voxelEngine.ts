@@ -1,3 +1,4 @@
+import { ToolId, BlockId } from '@/common/enums';
 /**
  * voxelEngine.ts
  * --------------
@@ -11,12 +12,12 @@ import { createBlockMaterials } from './blockMaterials';
 import { createBlockLights } from './blockLights';
 import { isBlockType, parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
 import type { Tool } from '@/types/tools';
-import { GRID_SIZE } from '@/utils/constants';
+import { GRID_SIZE, SETTINGS } from '@/common/settings';
 
 export type { VoxelData } from '@/features/voxel/blocks';
 
 const HALF_GRID = GRID_SIZE / 2;
-const HISTORY_LIMIT = 100;
+const HISTORY_LIMIT = SETTINGS.editor.historyLimit;
 
 export interface HistoryState {
     canUndo: boolean;
@@ -48,17 +49,17 @@ export function createVoxelEngine(
     camera: THREE.Camera,
     domElement: HTMLElement,
     initialColor: string,
-    initialBlockType: BlockType = 'custom',
+    initialBlockType: BlockType = SETTINGS.editor.block,
     onHistoryChange?: (state: HistoryState) => void,
     onPick?: (voxel: VoxelData) => void,
 ): VoxelEngine {
 
     // ── Shared State ─────────────────────────────────────────
     let currentColor = initialColor;
-    let currentBlockType: BlockType = isBlockType(initialBlockType) ? initialBlockType : 'custom';
+    let currentBlockType: BlockType = isBlockType(initialBlockType) ? initialBlockType : BlockId.Custom;
     const blockMaterials = createBlockMaterials();
     const blockLights = createBlockLights(scene);
-    let currentMode: Tool = 'select';
+    let currentMode: Tool = SETTINGS.editor.tool;
 
     /** Placed voxel meshes keyed by "x,y,z" */
     const voxels = new Map<string, THREE.Mesh>();
@@ -82,7 +83,7 @@ export function createVoxelEngine(
     const hoverMat = new THREE.MeshBasicMaterial({
         color: new THREE.Color(initialColor),
         transparent: true,
-        opacity: 0.5,
+        opacity: SETTINGS.hover.opacity,
         side: THREE.FrontSide,
         depthWrite: false,
     });
@@ -91,8 +92,8 @@ export function createVoxelEngine(
     scene.add(hoverMesh);
 
     const edgeMat = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        opacity: 0.85,
+        color: SETTINGS.hover.edgeColor,
+        opacity: SETTINGS.hover.edgeOpacity,
         transparent: true,
     });
     const edgeLines = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), edgeMat);
@@ -101,9 +102,9 @@ export function createVoxelEngine(
 
     // ── Erase Hover Highlight (red tint overlay on hit block) ─
     const eraseHoverMat = new THREE.MeshBasicMaterial({
-        color: 0xff2222,
+        color: SETTINGS.hover.eraseColor,
         transparent: true,
-        opacity: 0.45,
+        opacity: SETTINGS.hover.eraseOpacity,
         side: THREE.FrontSide,
         depthWrite: false,
     });
@@ -112,8 +113,8 @@ export function createVoxelEngine(
     scene.add(eraseHoverMesh);
 
     const eraseEdgeMat = new THREE.LineBasicMaterial({
-        color: 0xff4444,
-        opacity: 0.95,
+        color: SETTINGS.hover.eraseEdgeColor,
+        opacity: SETTINGS.hover.eraseEdgeOpacity,
         transparent: true,
     });
     const eraseEdgeLines = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), eraseEdgeMat);
@@ -129,7 +130,7 @@ export function createVoxelEngine(
     }
 
     function addVoxel(data: VoxelData) {
-        const { x, y, z, color, blockType = 'custom' } = data;
+        const { x, y, z, color, blockType = BlockId.Custom } = data;
         const key = cellKey(x, y, z);
         const existing = voxels.get(key);
         if (existing) {
@@ -251,7 +252,7 @@ export function createVoxelEngine(
         eraseHoverMesh.visible = false;
         eraseEdgeLines.visible = false;
 
-        if (currentMode === 'erase') {
+        if (currentMode === ToolId.Erase) {
             hoverMesh.visible = false;
             edgeLines.visible = false;
             const { hitBlock } = getTargets(event);
@@ -266,7 +267,7 @@ export function createVoxelEngine(
 
         const { place, hitBlock } = getTargets(event);
 
-        if (currentMode !== 'draw') {
+        if (currentMode !== ToolId.Draw) {
             // Select mode: only show highlight on hit block
             if (hitBlock) {
                 hoverMesh.position.copy(hitBlock);
@@ -277,7 +278,7 @@ export function createVoxelEngine(
                 hoverMesh.visible = false;
                 edgeLines.visible = false;
             }
-        } else if (currentMode === 'draw') {
+        } else if (currentMode === ToolId.Draw) {
             // Draw mode: only show white border outline at the place target
             hoverMesh.visible = false;
             if (place) {
@@ -302,17 +303,17 @@ export function createVoxelEngine(
     }
 
     function onMouseDown(event: MouseEvent) {
-        if (event.button === 0 && ['paint', 'fill', 'pick'].includes(currentMode)) {
+        if (event.button === 0 && (currentMode === ToolId.Paint || currentMode === ToolId.Fill || currentMode === ToolId.Pick)) {
             const { hitBlock } = getTargets(event);
             if (!hitBlock) return;
             const key = cellKey(hitBlock.x, hitBlock.y, hitBlock.z);
             const source = voxelAt(key);
             if (!source) return;
-            if (currentMode === 'pick') {
+            if (currentMode === ToolId.Pick) {
                 onPick?.(source);
                 return;
             }
-            if (currentMode === 'paint') {
+            if (currentMode === ToolId.Paint) {
                 commit([{ key, before: source, after: { ...source, color: currentColor, blockType: currentBlockType } }]);
             } else {
                 const queue = [key];
@@ -335,7 +336,7 @@ export function createVoxelEngine(
             onMouseMove(event);
             return;
         }
-        if (currentMode === 'erase') {
+        if (currentMode === ToolId.Erase) {
             if (event.button === 0) {
                 // Left click in erase mode = remove hovered voxel
                 const { hitBlock } = getTargets(event);
@@ -347,7 +348,7 @@ export function createVoxelEngine(
             return;
         }
 
-        if (currentMode !== 'draw') return;
+        if (currentMode !== ToolId.Draw) return;
 
         const { place } = getTargets(event);
 
@@ -380,7 +381,7 @@ export function createVoxelEngine(
             hoverMat.color.copy(c);
         },
         setBlockType(type: BlockType) {
-            currentBlockType = isBlockType(type) ? type : 'custom';
+            currentBlockType = isBlockType(type) ? type : BlockId.Custom;
         },
         setMode(mode: Tool) {
             currentMode = mode;

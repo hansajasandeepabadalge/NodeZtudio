@@ -1,33 +1,25 @@
-export const DEFAULT_GLOW_COLOR = '#ffad42';
+import { BlockId, TextureId } from '@/common/enums';
+import { DEFAULT_COLOR, DEFAULT_GLOW_COLOR, SETTINGS } from '@/common/settings';
+export { DEFAULT_GLOW_COLOR } from '@/common/settings';
 
 export const BLOCKS = [
-    { id: 'grass', label: 'Grass', color: '#648b38', description: 'Green grass top with earthy dirt sides.' },
-    { id: 'dirt', label: 'Dirt', color: '#896344', description: 'Speckled brown soil for terrain and foundations.' },
-    { id: 'stone', label: 'Stone', color: '#92958c', description: 'Rough gray stone for walls and paths.' },
-    { id: 'sand', label: 'Sand', color: '#d8c58d', description: 'Warm, pale sand for beaches and deserts.' },
-    { id: 'log', label: 'Wood Log', color: '#705038', description: 'Vertical bark sides and growth rings on the ends.' },
-    { id: 'planks', label: 'Wood Planks', color: '#b38b55', description: 'Timber boards for floors, roofs, and walls.' },
-    { id: 'leaves', label: 'Oak Leaves', color: '#6b9f43', description: 'Green oak foliage with transparent gaps for tree canopies.' },
-    { id: 'custom', label: 'Custom Color', color: '#95704b', description: 'A solid block using your selected paint color.' },
-    { id: 'glow', label: 'Glow Block', color: DEFAULT_GLOW_COLOR, description: 'A solid glowing block. Choose any glow color below.' },
+    { id: BlockId.Grass, label: 'Grass', color: SETTINGS.blocks.colors.grass, description: 'Green grass top with earthy dirt sides.' },
+    { id: BlockId.Dirt, label: 'Dirt', color: SETTINGS.blocks.colors.dirt, description: 'Speckled brown soil for terrain and foundations.' },
+    { id: BlockId.Stone, label: 'Stone', color: SETTINGS.blocks.colors.stone, description: 'Rough gray stone for walls and paths.' },
+    { id: BlockId.Sand, label: 'Sand', color: SETTINGS.blocks.colors.sand, description: 'Warm, pale sand for beaches and deserts.' },
+    { id: BlockId.Log, label: 'Wood Log', color: SETTINGS.blocks.colors.log, description: 'Vertical bark sides and growth rings on the ends.' },
+    { id: BlockId.Planks, label: 'Wood Planks', color: SETTINGS.blocks.colors.planks, description: 'Timber boards for floors, roofs, and walls.' },
+    { id: BlockId.Leaves, label: 'Oak Leaves', color: SETTINGS.blocks.colors.leaves, description: 'Green oak foliage with transparent gaps for tree canopies.' },
+    { id: BlockId.Custom, label: 'Custom Color', color: DEFAULT_COLOR, description: 'A solid block using your selected paint color.' },
+    { id: BlockId.Glow, label: 'Glow Block', color: DEFAULT_GLOW_COLOR, description: 'A solid glowing block. Choose any glow color below.' },
 ] as const;
 
-export type BlockType = typeof BLOCKS[number]['id'];
+export type BlockType = `${BlockId}`;
 
 /** Public assets shared by the scene materials and the block picker. */
-export const BLOCK_TEXTURE_URLS = {
-    grass_block_top: '/textures/grass_block_top.png',
-    grass_block_side: '/textures/grass_block_side.png',
-    dirt: '/textures/dirt.png',
-    stone: '/textures/stone.png',
-    sand: '/textures/sand.png',
-    log_oak: '/textures/log_oak.png',
-    log_oak_top: '/textures/log_oak_top.png',
-    planks_oak: '/textures/planks_oak.png',
-    leaves_oak: '/textures/leaves_oak.png',
-} as const;
+export const BLOCK_TEXTURE_URLS: Record<TextureKind, string> = SETTINGS.blocks.textures;
 
-export type TextureKind = keyof typeof BLOCK_TEXTURE_URLS;
+export type TextureKind = `${TextureId}`;
 
 export interface BlockEmission {
     color: string;
@@ -45,7 +37,7 @@ const LEGACY_LIGHT_COLORS = {
 };
 
 export function blockEmission(type: BlockType, color = DEFAULT_GLOW_COLOR): BlockEmission | undefined {
-    return type === 'glow' ? { color, intensity: 3, range: 4, emissiveIntensity: 1.6 } : undefined;
+    return type === BlockId.Glow ? { color, ...SETTINGS.blocks.emission } : undefined;
 }
 
 export interface VoxelData {
@@ -60,18 +52,18 @@ export function isBlockType(value: unknown): value is BlockType {
     return BLOCKS.some(block => block.id === value);
 }
 
-const BLOCK_FACE_TEXTURES: Record<Exclude<BlockType, 'custom' | 'glow'>, {
+const BLOCK_FACE_TEXTURES: Record<Exclude<BlockType, `${BlockId.Custom | BlockId.Glow}`>, {
     side: TextureKind;
     top?: TextureKind;
     bottom?: TextureKind;
 }> = {
-    grass: { side: 'grass_block_side', top: 'grass_block_top', bottom: 'dirt' },
-    log: { side: 'log_oak', top: 'log_oak_top' },
-    planks: { side: 'planks_oak' },
-    leaves: { side: 'leaves_oak' },
-    dirt: { side: 'dirt' },
-    stone: { side: 'stone' },
-    sand: { side: 'sand' },
+    [BlockId.Grass]: { side: TextureId.GrassSide, top: TextureId.GrassTop, bottom: TextureId.Dirt },
+    [BlockId.Log]: { side: TextureId.LogSide, top: TextureId.LogTop },
+    [BlockId.Planks]: { side: TextureId.Planks },
+    [BlockId.Leaves]: { side: TextureId.Leaves },
+    [BlockId.Dirt]: { side: TextureId.Dirt },
+    [BlockId.Stone]: { side: TextureId.Stone },
+    [BlockId.Sand]: { side: TextureId.Sand },
 };
 
 /** BoxGeometry order: right, left, top, bottom, front, back. Bottom defaults to top. */
@@ -94,6 +86,6 @@ export function parseVoxels(data: unknown): VoxelData[] {
             (blockType !== undefined && !isBlockType(blockType) && !legacyColor)) {
             throw new Error('Invalid voxel data.');
         }
-        return { x, y, z, color: legacyColor ?? color, blockType: legacyColor ? 'glow' : blockType ?? 'custom' };
+        return { x, y, z, color: legacyColor ?? color, blockType: legacyColor ? BlockId.Glow : blockType ?? BlockId.Custom };
     });
 }

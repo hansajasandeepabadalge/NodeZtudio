@@ -1,31 +1,33 @@
 'use client';
 
+import { ToolId, BlockId, SaveStatus } from '@/common/enums';
+
 import { useEffect, useRef, useCallback, useState } from 'react';
 import IsometricPlane from '@/features/rendering/IsometricPlane';
 import type { IsometricPlaneHandle } from '@/features/rendering/IsometricPlane';
 import Sidebar from '@/components/editor/Sidebar';
 import { TOOLS } from '@/components/editor/editorTools';
 import type { Tool } from '@/types/tools';
-import { DEFAULT_COLOR, GLASS, TEXT_COLOR } from '@/utils/constants';
+import { DEFAULT_COLOR, DEFAULT_GLOW_COLOR, DEFAULT_LIGHTING, AUTOSAVE_INTERVAL_MS, GLASS, TEXT_COLOR, SETTINGS } from '@/common/settings';
 import LightingControls from '@/components/editor/LightingControls';
-import { BLOCKS, DEFAULT_GLOW_COLOR, type BlockType, type VoxelData } from '@/features/voxel/blocks';
-import { DEFAULT_LIGHTING, type LightingSettings } from '@/features/rendering/dayNight';
-import { AUTOSAVE_INTERVAL_MS, readLocalSession, saveLocalSession, type LocalSession } from '@/features/voxel/localSession';
+import { BLOCKS, type BlockType, type VoxelData } from '@/features/voxel/blocks';
+import type { LightingSettings } from '@/features/rendering/dayNight';
+import { readLocalSession, saveLocalSession, type LocalSession } from '@/features/voxel/localSession';
 import styles from '@/components/editor/EditorWorkspace.module.css';
 
 // ── Component ──────────────────────────────────────────────
 export default function Playground() {
-    const [activeTool, setActiveTool] = useState<Tool>('select');
+    const [activeTool, setActiveTool] = useState<Tool>(SETTINGS.editor.tool);
     const [activeColor, setActiveColor] = useState<string>(DEFAULT_COLOR);
-    const [activeBlock, setActiveBlock] = useState<BlockType>('custom');
+    const [activeBlock, setActiveBlock] = useState<BlockType>(SETTINGS.editor.block);
     const [glowColor, setGlowColor] = useState<string>(DEFAULT_GLOW_COLOR);
     const [lighting, setLighting] = useState(DEFAULT_LIGHTING);
     const [currentTime, setCurrentTime] = useState(DEFAULT_LIGHTING.time);
     const [history, setHistory] = useState({ canUndo: false, canRedo: false });
-    const [showGrid, setShowGrid] = useState(true);
+    const [showGrid, setShowGrid] = useState(SETTINGS.editor.showGrid);
     const resetFnRef = useRef<(() => void) | null>(null);
     const planeRef   = useRef<IsometricPlaneHandle>(null);
-    const [localSaveStatus, setLocalSaveStatus] = useState('Autosave on');
+    const [localSaveStatus, setLocalSaveStatus] = useState<SaveStatus>(SaveStatus.Enabled);
     const sessionRef = useRef<Omit<LocalSession, 'voxels'>>({ activeTool, activeColor, activeBlock, glowColor, lighting, showGrid });
 
     useEffect(() => {
@@ -37,9 +39,9 @@ export default function Playground() {
             if (!planeRef.current?.isReady()) return;
             try {
                 const saved = saveLocalSession(window.localStorage, { ...sessionRef.current, voxels: planeRef.current.exportScene() });
-                setLocalSaveStatus(saved ? 'Saved locally' : 'Local save unavailable');
+                setLocalSaveStatus(saved ? SaveStatus.Saved : SaveStatus.Unavailable);
             } catch {
-                setLocalSaveStatus('Local save unavailable');
+                setLocalSaveStatus(SaveStatus.Unavailable);
             }
         };
         const onVisibilityChange = () => { if (document.hidden) save(); };
@@ -58,33 +60,33 @@ export default function Playground() {
 
     const handleBlockSelect = useCallback((type: BlockType) => {
         setActiveBlock(type);
-        if (type === 'glow') {
+        if (type === BlockId.Glow) {
             setActiveColor(glowColor);
-        } else if (type !== 'custom') {
+        } else if (type !== BlockId.Custom) {
             const block = BLOCKS.find(block => block.id === type);
             if (block) setActiveColor(block.color);
         }
-        setActiveTool(current => current === 'paint' || current === 'fill' ? current : 'draw');
+        setActiveTool(current => current === ToolId.Paint || current === ToolId.Fill ? current : ToolId.Draw);
     }, [glowColor]);
 
     const handleColorChange = useCallback((color: string) => {
         setActiveColor(color);
-        if (activeBlock === 'glow') setGlowColor(color);
-        else setActiveBlock('custom');
+        if (activeBlock === BlockId.Glow) setGlowColor(color);
+        else setActiveBlock(BlockId.Custom);
     }, [activeBlock]);
 
     const handleGlowColorChange = useCallback((color: string) => {
         setGlowColor(color);
         setActiveColor(color);
-        setActiveBlock('glow');
-        setActiveTool(current => current === 'paint' || current === 'fill' ? current : 'draw');
+        setActiveBlock(BlockId.Glow);
+        setActiveTool(current => current === ToolId.Paint || current === ToolId.Fill ? current : ToolId.Draw);
     }, []);
 
     const handlePick = useCallback((voxel: VoxelData) => {
-        setActiveBlock(voxel.blockType ?? 'custom');
+        setActiveBlock(voxel.blockType ?? BlockId.Custom);
         setActiveColor(voxel.color);
-        if (voxel.blockType === 'glow') setGlowColor(voxel.color);
-        setActiveTool('draw');
+        if (voxel.blockType === BlockId.Glow) setGlowColor(voxel.color);
+        setActiveTool(ToolId.Draw);
     }, []);
     const handleToggleGrid = useCallback(() => setShowGrid(value => !value), []);
 
@@ -105,10 +107,10 @@ export default function Playground() {
             setGlowColor(session.glowColor);
             setLighting(session.lighting);
             setCurrentTime(session.lighting.time);
-            setShowGrid(session.showGrid ?? true);
-            setLocalSaveStatus('Restored locally');
+            setShowGrid(session.showGrid ?? SETTINGS.editor.showGrid);
+            setLocalSaveStatus(SaveStatus.Restored);
         } catch {
-            setLocalSaveStatus('Local save unavailable');
+            setLocalSaveStatus(SaveStatus.Unavailable);
         }
     }, []);
 
@@ -120,12 +122,12 @@ export default function Playground() {
     const handleSave = useCallback(() => {
         const data = planeRef.current?.exportScene() ?? [];
         if (data.length === 0) return;
-        const json = JSON.stringify({ version: 2, voxels: data }, null, 2);
+        const json = JSON.stringify({ version: SETTINGS.storage.sceneVersion, voxels: data }, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href     = url;
-        a.download = `scene-${Date.now()}.nzs`;
+        a.download = `scene-${Date.now()}${SETTINGS.storage.sceneExtension}`;
         a.click();
         URL.revokeObjectURL(url);
     }, []);
@@ -134,7 +136,7 @@ export default function Playground() {
     const handleLoad = useCallback(() => {
         const input = document.createElement('input');
         input.type   = 'file';
-        input.accept = '.nzs,application/json';
+        input.accept = `${SETTINGS.storage.sceneExtension},application/json`;
         input.onchange = () => {
             const file = input.files?.[0];
             if (!file) return;
@@ -164,16 +166,16 @@ export default function Playground() {
             if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
             const key = event.key.toLowerCase();
             if (event.ctrlKey || event.metaKey) {
-                if (key === 'z') { event.preventDefault(); if (event.shiftKey) handleRedo(); else handleUndo(); }
-                else if (key === 'y') { event.preventDefault(); handleRedo(); }
-                else if (key === 's') { event.preventDefault(); handleSave(); }
+                if (key === SETTINGS.shortcuts.undo.toLowerCase()) { event.preventDefault(); if (event.shiftKey) handleRedo(); else handleUndo(); }
+                else if (key === SETTINGS.shortcuts.redo.toLowerCase()) { event.preventDefault(); handleRedo(); }
+                else if (key === SETTINGS.shortcuts.save.toLowerCase()) { event.preventDefault(); handleSave(); }
                 return;
             }
             if (event.shiftKey) return;
             const tool = TOOLS.find(item => item.key.toLowerCase() === key);
             if (tool) { event.preventDefault(); setActiveTool(tool.id); }
-            else if (key === 'g') { event.preventDefault(); handleToggleGrid(); }
-            else if (key === 'r') { event.preventDefault(); handleResetView(); }
+            else if (key === SETTINGS.shortcuts.grid.toLowerCase()) { event.preventDefault(); handleToggleGrid(); }
+            else if (key === SETTINGS.shortcuts.reset.toLowerCase()) { event.preventDefault(); handleResetView(); }
         };
         window.addEventListener('keydown', handleShortcut);
         return () => window.removeEventListener('keydown', handleShortcut);

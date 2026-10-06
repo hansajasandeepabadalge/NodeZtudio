@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { SETTINGS } from '@/common/settings';
+import { TextureId } from '@/common/enums';
 import { BLOCK_TEXTURE_URLS, blockFaces, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
 
 /** Materials belong to the engine, so deleting one block cannot break its neighbors. */
@@ -22,9 +24,9 @@ export function createBlockMaterials() {
         if (!material) {
             const texture = createTexture(kind);
             textures.set(kind, texture);
-            material = new THREE.MeshStandardMaterial({ map: texture, roughness: 1, metalness: 0 });
-            if (kind === 'leaves_oak') {
-                material.alphaTest = 0.5;
+            material = new THREE.MeshStandardMaterial({ map: texture, roughness: SETTINGS.blocks.roughness, metalness: SETTINGS.blocks.metalness });
+            if (kind === TextureId.Leaves) {
+                material.alphaTest = SETTINGS.blocks.leavesAlphaTest;
                 material.side = THREE.DoubleSide;
             }
             materials.set(kind, material);
@@ -39,7 +41,7 @@ export function createBlockMaterials() {
             const key = `${type}:${color.toLowerCase()}`;
             let material = materials.get(key);
             if (!material) {
-                material = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0 });
+                material = new THREE.MeshStandardMaterial({ color, roughness: SETTINGS.blocks.roughness, metalness: SETTINGS.blocks.metalness });
                 const emission = blockEmission(type, color);
                 if (emission) {
                     material.emissive.set(emission.color);

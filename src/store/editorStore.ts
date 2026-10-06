@@ -1,6 +1,8 @@
+import type { Tool } from '@/types/tools';
+
 // Global editor state — expand with Zustand or Redux as the app grows.
 export interface EditorState {
-    activeTool: string;
+    activeTool: Tool;
     activeColor: string;
 }
 

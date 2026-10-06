@@ -1,6 +1,6 @@
 'use client';
 
-import { PALETTE } from '@/utils/constants';
+import { PALETTE } from '@/common/settings';
 import styles from './Sidebar.module.css';
 
 export default function ColorPicker({ activeColor, onColorChange }: {

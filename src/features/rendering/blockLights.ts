@@ -1,14 +1,15 @@
 import * as THREE from 'three';
+import { SETTINGS } from '@/common/settings';
 import { blockEmission, type BlockType, type BlockEmission } from '@/features/voxel/blocks';
 
 // Keep the shader's light count stable as blocks are placed/erased. All light
 // blocks remain emissive; the nearest sources get local illumination in large scenes.
-export const MAX_BLOCK_LIGHTS = 16;
+export const MAX_BLOCK_LIGHTS = SETTINGS.blocks.maxLights;
 
 export function createBlockLights(scene: THREE.Scene) {
     const sources = new Map<string, { position: THREE.Vector3; emission: BlockEmission }>();
     const lights = Array.from({ length: MAX_BLOCK_LIGHTS }, () => {
-        const light = new THREE.PointLight(0xffffff, 0, 7, 2);
+        const light = new THREE.PointLight(0xffffff, 0, SETTINGS.blocks.emission.range, SETTINGS.blocks.lightDecay);
         light.name = 'Block glow';
         scene.add(light);
         return light;

@@ -1,21 +1,22 @@
 'use client';
 
+import { ToolId } from '@/common/enums';
+
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createScene, createRenderer, createCamera, DEFAULT_POS, DEFAULT_TARGET, DEFAULT_ZOOM, FRUSTUM_SIZE } from '@/engine/core/initScene';
+import { createScene, createRenderer, createCamera, DEFAULT_POS, DEFAULT_TARGET } from '@/engine/core/initScene';
 import { createOrbitControls } from '@/engine/controls/orbitControls';
 import { createGridHelper, createAxisLines } from '@/engine/helpers/gridHelper';
 import { addSceneLighting } from '@/engine/core/lighting';
 import {createVoxelEngine, HistoryState} from '@/features/rendering/voxelEngine';
 import type { VoxelData } from '@/features/rendering/voxelEngine';
 import type { Tool } from '@/types/tools';
-import { DEFAULT_COLOR, GRID_SIZE } from '@/utils/constants';
+import { DEFAULT_COLOR, DEFAULT_LIGHTING, GRID_SIZE, FRUSTUM_SIZE, LERP_SPEED, SETTINGS } from '@/common/settings';
 import type { BlockType } from '@/features/voxel/blocks';
-import { advanceTime, DEFAULT_LIGHTING, type LightingSettings } from './dayNight';
+import { advanceTime, type LightingSettings } from './dayNight';
 import { createPostProcessing } from './postProcessing';
 
-const LERP_SPEED = 0.05;
 
 export interface IsometricPlaneHandle {
     isReady(): boolean;
@@ -41,13 +42,13 @@ interface IsometricPlaneProps {
 const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(function IsometricPlane({
     onResetReady,
     activeColor = DEFAULT_COLOR,
-    activeTool  = 'select',
-    activeBlock = 'custom',
+    activeTool  = SETTINGS.editor.tool,
+    activeBlock = SETTINGS.editor.block,
     lighting = DEFAULT_LIGHTING,
     onTimeChange,
     onHistoryChange,
     onPick,
-    showGrid = true,
+    showGrid = SETTINGS.editor.showGrid,
 }, ref) {
     const mountRef     = useRef<HTMLDivElement>(null);
     const engineRef    = useRef<ReturnType<typeof createVoxelEngine> | null>(null);
@@ -105,7 +106,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         toolRef.current = activeTool;
         if (controlsRef.current) {
             controlsRef.current.enabled = true; // Always allow pan/zoom
-            if (activeTool === 'select') {
+            if (activeTool === ToolId.Select) {
                 controlsRef.current.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
                 controlsRef.current.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
                 controlsRef.current.mouseButtons.RIGHT = THREE.MOUSE.PAN;
@@ -162,11 +163,11 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             animFrameId = requestAnimationFrame(animate);
             const now = performance.now();
             // Pause while the tab is hidden; avoid jumping ahead when it returns.
-            const delta = document.hidden ? 0 : Math.min((now - previousTime) / 1000, 0.1);
+            const delta = document.hidden ? 0 : Math.min((now - previousTime) / 1000, SETTINGS.lighting.maxFrameDelta);
             previousTime = now;
             timeRef.current = advanceTime(timeRef.current, delta, lightingRef.current);
             sceneLighting.update(timeRef.current, lightingRef.current.brightness);
-            if (now - lastTimeReport >= 250) {
+            if (now - lastTimeReport >= SETTINGS.lighting.timeReportIntervalMs) {
                 onTimeChangeRef.current?.(timeRef.current);
                 lastTimeReport = now;
             }
@@ -174,16 +175,16 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
             if (isResetting) {
                 camera.position.lerp(DEFAULT_POS, LERP_SPEED);
                 controls.target.lerp(DEFAULT_TARGET, LERP_SPEED);
-                camera.zoom += (DEFAULT_ZOOM - camera.zoom) * LERP_SPEED * 3;
+                camera.zoom += (SETTINGS.camera.zoom - camera.zoom) * LERP_SPEED * SETTINGS.camera.zoomLerpMultiplier;
                 camera.updateProjectionMatrix();
                 if (
-                    camera.position.distanceTo(DEFAULT_POS)    < 0.01 &&
-                    controls.target.distanceTo(DEFAULT_TARGET) < 0.01 &&
-                    Math.abs(camera.zoom - DEFAULT_ZOOM)       < 0.001
+                    camera.position.distanceTo(DEFAULT_POS)    < SETTINGS.camera.positionTolerance &&
+                    controls.target.distanceTo(DEFAULT_TARGET) < SETTINGS.camera.positionTolerance &&
+                    Math.abs(camera.zoom - SETTINGS.camera.zoom)       < SETTINGS.camera.zoomTolerance
                 ) {
                     camera.position.copy(DEFAULT_POS);
                     controls.target.copy(DEFAULT_TARGET);
-                    camera.zoom = DEFAULT_ZOOM;
+                    camera.zoom = SETTINGS.camera.zoom;
                     camera.updateProjectionMatrix();
                     isResetting      = false;
                     controls.enabled = true;

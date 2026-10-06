@@ -7,7 +7,7 @@
  */
 
 import * as THREE from 'three';
-import { GRID_SIZE } from '@/utils/constants';
+import { GRID_SIZE, SETTINGS } from '@/common/settings';
 
 const HALF_GRID = GRID_SIZE / 2;
 
@@ -39,7 +39,7 @@ export function createHoverHighlight(
     const fillMat = new THREE.MeshBasicMaterial({
         color: new THREE.Color(initialColor),
         transparent: true,
-        opacity: 0.5,
+        opacity: SETTINGS.hover.opacity,
         side: THREE.FrontSide,
         depthWrite: false,
     });
@@ -50,7 +50,7 @@ export function createHoverHighlight(
 
     const edgeMat = new THREE.LineBasicMaterial({
         color: new THREE.Color(initialColor),
-        opacity: 0.85,
+        opacity: SETTINGS.hover.edgeOpacity,
         transparent: true,
     });
     const edgeLines = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), edgeMat);

@@ -1,7 +1,7 @@
 'use client';
 
 import { formatTime, type LightingSettings } from '@/features/rendering/dayNight';
-import { GLASS, TEXT_COLOR } from '@/utils/constants';
+import { GLASS, TEXT_COLOR, SETTINGS } from '@/common/settings';
 
 interface Props {
     settings: LightingSettings;
@@ -35,12 +35,12 @@ export default function LightingControls({ settings, currentTime, onChange }: Pr
             </label>
             <label style={{ display: 'grid', gap: 7 }}>
                 Time of day
-                <input aria-label="Time of day" type="range" min="0" max="23.9833333333" step="0.0166666667"
+                <input aria-label="Time of day" type="range" min={0} max={SETTINGS.lighting.hoursPerDay - 1 / SETTINGS.lighting.minutesPerHour} step={1 / SETTINGS.lighting.minutesPerHour}
                     value={currentTime} onChange={event => chooseTime(Number(event.target.value))}
-                    style={{ width: '100%', accentColor: '#d0a34f', margin: 0 }} />
+                    style={{ width: '100%', accentColor: SETTINGS.ui.lightingAccent, margin: 0 }} />
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, margin: '10px 0 14px' }}>
-                {([['Dawn', 6], ['Day', 12], ['Dusk', 18], ['Night', 0]] as const).map(([label, time]) => (
+                {SETTINGS.lighting.presets.map(({ label, time }) => (
                     <button key={label} type="button" style={buttonStyle} onClick={() => chooseTime(time)}>{label}</button>
                 ))}
             </div>
@@ -49,18 +49,15 @@ export default function LightingControls({ settings, currentTime, onChange }: Pr
                 <select aria-label="Full cycle duration" value={settings.cycleSeconds}
                     onChange={event => onChange({ ...settings, cycleSeconds: Number(event.target.value) })}
                     style={{ ...buttonStyle, background: '#222831' }}>
-                    <option value={60}>1 minute</option>
-                    <option value={240}>4 minutes</option>
-                    <option value={600}>10 minutes</option>
-                    <option value={1200}>20 minutes</option>
+                    {SETTINGS.lighting.cycleOptions.map(({ label, seconds }) => <option key={seconds} value={seconds}>{label}</option>)}
                 </select>
             </label>
             <label style={{ display: 'grid', gap: 7 }}>
                 <span>Brightness <span style={{ float: 'right', opacity: 0.65 }}>{Math.round(settings.brightness * 100)}%</span></span>
-                <input aria-label="Lighting brightness" type="range" min="0.25" max="2" step="0.05"
+                <input aria-label="Lighting brightness" type="range" min={SETTINGS.lighting.minBrightness} max={SETTINGS.lighting.maxBrightness} step={SETTINGS.lighting.brightnessStep}
                     value={settings.brightness}
                     onChange={event => onChange({ ...settings, brightness: Number(event.target.value) })}
-                    style={{ width: '100%', accentColor: '#d0a34f', margin: 0 }} />
+                    style={{ width: '100%', accentColor: SETTINGS.ui.lightingAccent, margin: 0 }} />
             </label>
             <p style={{ margin: '10px 0 0', fontSize: 10, opacity: 0.55 }}>Adjusting the time pauses the cycle.</p>
             </div>

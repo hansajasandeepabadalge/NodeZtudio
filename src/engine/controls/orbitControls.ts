@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DEFAULT_TARGET } from '@/engine/core/initScene';
+import { SETTINGS } from '@/common/settings';
 
 /**
  * Creates OrbitControls with damping and screen-space panning,
@@ -11,9 +12,9 @@ export function createOrbitControls(
     domElement: HTMLElement,
 ): OrbitControls {
     const controls = new OrbitControls(camera, domElement);
-    controls.enableDamping    = true;
-    controls.dampingFactor    = 0.08;
-    controls.screenSpacePanning = true;
+    controls.enableDamping = SETTINGS.controls.enableDamping;
+    controls.dampingFactor = SETTINGS.controls.dampingFactor;
+    controls.screenSpacePanning = SETTINGS.controls.screenSpacePanning;
     controls.target.copy(DEFAULT_TARGET);
     controls.update();
     return controls;

@@ -7,7 +7,7 @@
  */
 
 import * as THREE from 'three';
-import { GRID_SIZE } from '@/utils/constants';
+import { GRID_SIZE } from '@/common/settings';
 
 const HALF_GRID = GRID_SIZE / 2;
 
