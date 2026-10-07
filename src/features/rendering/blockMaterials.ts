@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SETTINGS } from '@/common/settings';
 import { TextureId } from '@/common/enums';
-import { BLOCK_TEXTURE_URLS, blockFaces, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
+import { BLOCK_TEXTURE_URLS, blockFaces, blockEmission, textureSettings, type BlockType, type TextureKind } from '@/features/voxel/blocks';
 
 /** Materials belong to the engine, so deleting one block cannot break its neighbors. */
 export function createBlockMaterials() {
@@ -25,7 +25,13 @@ export function createBlockMaterials() {
             const texture = createTexture(kind);
             textures.set(kind, texture);
             material = new THREE.MeshStandardMaterial({ map: texture, roughness: SETTINGS.blocks.roughness, metalness: SETTINGS.blocks.metalness });
-            if (kind === TextureId.Leaves) {
+            const settings = textureSettings(kind);
+            if (settings?.transparent) {
+                material.transparent = true;
+                material.opacity = settings.alpha ? 1 : 0.7;
+                material.depthWrite = false;
+                material.side = THREE.DoubleSide;
+            } else if (kind === TextureId.Leaves || settings?.alpha) {
                 material.alphaTest = SETTINGS.blocks.leavesAlphaTest;
                 material.side = THREE.DoubleSide;
             }

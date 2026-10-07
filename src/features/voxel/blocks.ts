@@ -1,8 +1,9 @@
 import { BlockId, TextureId } from '@/common/enums';
 import { DEFAULT_COLOR, DEFAULT_GLOW_COLOR, SETTINGS } from '@/common/settings';
+import { BEDROCK_PACK } from './bedrockPack';
 export { DEFAULT_GLOW_COLOR } from '@/common/settings';
 
-export const BLOCKS = [
+const BUILTIN_BLOCKS = [
     { id: BlockId.Grass, label: 'Grass', color: SETTINGS.blocks.colors.grass, description: 'Green grass top with earthy dirt sides.' },
     { id: BlockId.Dirt, label: 'Dirt', color: SETTINGS.blocks.colors.dirt, description: 'Speckled brown soil for terrain and foundations.' },
     { id: BlockId.Stone, label: 'Stone', color: SETTINGS.blocks.colors.stone, description: 'Rough gray stone for walls and paths.' },
@@ -14,12 +15,43 @@ export const BLOCKS = [
     { id: BlockId.Glow, label: 'Glow Block', color: DEFAULT_GLOW_COLOR, description: 'A solid glowing block. Choose any glow color below.' },
 ] as const;
 
-export type BlockType = `${BlockId}`;
+export type BlockType = `${BlockId}` | `minecraft:${string}`;
+export type TextureKind = `${TextureId}` | `bedrock:${string}`;
+
+export interface BlockDefinition {
+    id: BlockType;
+    label: string;
+    color: string;
+    description: string;
+    category: string;
+}
+
+export const MINECRAFT_PACK = BEDROCK_PACK.pack;
+export const BLOCKS: BlockDefinition[] = [
+    ...BUILTIN_BLOCKS.map(block => ({ ...block, category: 'Editor Basics' })),
+    ...BEDROCK_PACK.blocks.map(block => ({ ...block, id: block.id as BlockType })),
+];
+const blockIds = new Set<string>(BLOCKS.map(block => block.id));
+const minecraftFaces = new Map(BEDROCK_PACK.blocks.map(block => [block.id, block.faces]));
+
+interface PackTexture {
+    url: string;
+    alpha: boolean;
+    transparent: boolean;
+    animated: boolean;
+    color: string;
+}
+const packTextures: Record<string, PackTexture> = BEDROCK_PACK.textures;
+
+export function textureSettings(kind: TextureKind) {
+    return packTextures[kind];
+}
 
 /** Public assets shared by the scene materials and the block picker. */
-export const BLOCK_TEXTURE_URLS: Record<TextureKind, string> = SETTINGS.blocks.textures;
-
-export type TextureKind = `${TextureId}`;
+export const BLOCK_TEXTURE_URLS: Record<string, string> = {
+    ...SETTINGS.blocks.textures,
+    ...Object.fromEntries(Object.entries(packTextures).map(([key, texture]) => [key, texture.url])),
+};
 
 export interface BlockEmission {
     color: string;
@@ -49,10 +81,10 @@ export interface VoxelData {
 }
 
 export function isBlockType(value: unknown): value is BlockType {
-    return BLOCKS.some(block => block.id === value);
+    return typeof value === 'string' && blockIds.has(value);
 }
 
-const BLOCK_FACE_TEXTURES: Record<Exclude<BlockType, `${BlockId.Custom | BlockId.Glow}`>, {
+const BLOCK_FACE_TEXTURES: Record<Exclude<`${BlockId}`, `${BlockId.Custom | BlockId.Glow}`>, {
     side: TextureKind;
     top?: TextureKind;
     bottom?: TextureKind;
@@ -68,6 +100,8 @@ const BLOCK_FACE_TEXTURES: Record<Exclude<BlockType, `${BlockId.Custom | BlockId
 
 /** BoxGeometry order: right, left, top, bottom, front, back. Bottom defaults to top. */
 export function blockFaces(type: BlockType): TextureKind[] | undefined {
+    const faces = minecraftFaces.get(type);
+    if (faces) return [...faces] as TextureKind[];
     if (!Object.hasOwn(BLOCK_FACE_TEXTURES, type)) return undefined;
     const { side, top = side, bottom = top } = BLOCK_FACE_TEXTURES[type as keyof typeof BLOCK_FACE_TEXTURES];
     return [side, side, top, bottom, side, side];

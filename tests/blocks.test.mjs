@@ -1,6 +1,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
+import { existsSync, readFileSync } from 'node:fs';
 import * as THREE from 'three';
 
 // Node's native TS runner needs the same aliases as the application bundler.
@@ -16,7 +17,7 @@ registerHooks({
     },
 });
 
-const { BLOCKS, blockFaces, blockEmission } = await import('../src/features/voxel/blocks.ts');
+const { BLOCKS, BLOCK_TEXTURE_URLS, MINECRAFT_PACK, isBlockType, blockFaces, blockEmission } = await import('../src/features/voxel/blocks.ts');
 const { createVoxelEngine } = await import('../src/features/rendering/voxelEngine.ts');
 const { createBlockMaterials } = await import('../src/features/rendering/blockMaterials.ts');
 const { MAX_BLOCK_LIGHTS } = await import('../src/features/rendering/blockLights.ts');
@@ -219,6 +220,83 @@ test('box erase cancels without deleting and resets the single erase preview', (
         assert.deepEqual(outline.scale.toArray(), [1, 1, 1]);
         assert.deepEqual(engine.exportScene(), original);
     } finally { engine.dispose(); }
+});
+
+test('the pinned Mojang pack has a unique catalog and a local PNG for every face', () => {
+    const official = BLOCKS.filter(block => block.id.startsWith('minecraft:') && block.category !== 'Texture Variants');
+    assert.equal(official.length, MINECRAFT_PACK.blockCount);
+    assert.ok(official.length > 1300);
+    assert.equal(new Set(BLOCKS.map(block => block.id)).size, BLOCKS.length);
+    for (const block of BLOCKS) {
+        assert.ok(isBlockType(block.id));
+        assert.match(block.color, /^#[a-f\d]{6}$/i);
+        if (block.id === 'custom' || block.id === 'glow') continue;
+        const faces = blockFaces(block.id);
+        assert.equal(faces.length, 6);
+        for (const face of faces) assert.ok(BLOCK_TEXTURE_URLS[face], `missing URL for ${block.id}`);
+    }
+    for (const url of new Set(Object.values(BLOCK_TEXTURE_URLS))) {
+        const file = new URL(`../public${url}`, import.meta.url);
+        assert.ok(existsSync(file), `missing texture ${url}`);
+        assert.equal(readFileSync(file).subarray(1, 4).toString(), 'PNG');
+    }
+    assert.ok(existsSync(new URL('../public/texture-packs/minecraft-bedrock/minecraft-bedrock.zip', import.meta.url)));
+    assert.equal(isBlockType('minecraft:made_up_block'), false);
+    assert.equal(isBlockType('minecraft:air'), false);
+});
+
+test('official blocks use directional faces, cutout foliage, and transparent glass', () => {
+    const library = createBlockMaterials();
+    try {
+        assert.deepEqual(blockFaces('minecraft:oak_log'), ['bedrock:log_oak', 'bedrock:log_oak', 'bedrock:log_oak_top', 'bedrock:log_oak_top', 'bedrock:log_oak', 'bedrock:log_oak']);
+        assert.equal(blockFaces('minecraft:furnace')[4], 'bedrock:furnace_front_off');
+        assert.equal(blockFaces('minecraft:furnace')[5], 'bedrock:furnace_side');
+        const leaves = library.get('minecraft:oak_leaves', '#ffffff')[0];
+        assert.equal(leaves.alphaTest, .5);
+        assert.equal(leaves.side, THREE.DoubleSide);
+        assert.equal(leaves.transparent, false);
+        assert.equal(library.get('minecraft:glass', '#ffffff')[0].transparent, true);
+        assert.equal(library.get('minecraft:stone', '#ffffff')[0].transparent, false);
+        for (const type of ['minecraft:grass', 'minecraft:grass_block', 'minecraft:texture/grass_side_snowed']) {
+            if (!isBlockType(type)) continue;
+            const sides = library.get(type, '#ffffff');
+            assert.equal(sides[0].alphaTest, 0, 'grass sides must keep the dirt opaque');
+            assert.equal(sides[0].transparent, false);
+        }
+    } finally { library.dispose(); }
+});
+
+test('official blocks work with box build, box erase, undo, and JSON reload', () => {
+    const { engine, scene, listeners } = setup();
+    const click = x => listeners.get('mousedown')({ button: 0, clientX: x, clientY: 100 });
+    try {
+        engine.setBlockType('minecraft:diamond_block');
+        engine.setMode('box');
+        scene.updateMatrixWorld();
+        click(100); click(140);
+        const built = engine.exportScene();
+        assert.equal(built.length, 3);
+        assert.ok(built.every(block => block.blockType === 'minecraft:diamond_block'));
+        engine.importScene(JSON.parse(JSON.stringify(built)));
+        engine.setMode('box-erase');
+        scene.updateMatrixWorld();
+        click(100); click(140);
+        assert.deepEqual(engine.exportScene(), []);
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), built);
+    } finally { engine.dispose(); }
+});
+
+test('snowy grass uses snow on top, dirt below, and snowy textures only on its sides', () => {
+    for (const side of ['grass_block_snow', 'grass_side_snowed']) {
+        const type = `minecraft:texture/${side}`;
+        assert.deepEqual(blockFaces(type), [
+            `bedrock:${side}`, `bedrock:${side}`, 'bedrock:snow',
+            'bedrock:dirt', `bedrock:${side}`, `bedrock:${side}`,
+        ]);
+        assert.match(BLOCKS.find(block => block.id === type).label, /^Snowy Grass/);
+    }
+    assert.deepEqual(blockFaces('minecraft:snow'), Array(6).fill('bedrock:snow'));
 });
 
 test('grass and logs have the correct top, side, and bottom textures', () => {

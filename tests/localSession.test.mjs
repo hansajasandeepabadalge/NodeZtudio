@@ -51,6 +51,15 @@ test('new tool selections and grid visibility persist while older sessions still
     assert.deepEqual(readLocalSession(storage), snapshot);
 });
 
+test('official materials and texture variants survive local session restoration', () => {
+    const storage = memoryStorage();
+    for (const activeBlock of ['minecraft:diamond_block', 'minecraft:texture/grass_side_carried']) {
+        const session = { ...snapshot, activeBlock, voxels: [{ ...snapshot.voxels[0], blockType: activeBlock }] };
+        assert.equal(saveLocalSession(storage, session), true);
+        assert.deepEqual(readLocalSession(storage), session);
+    }
+});
+
 test('corrupt or incompatible sessions are rejected without partially restoring settings', () => {
     const storage = memoryStorage();
     const invalid = [

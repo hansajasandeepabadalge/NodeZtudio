@@ -2,8 +2,8 @@
 
 import { BlockId } from '@/common/enums';
 
-import { memo } from 'react';
-import { BLOCKS, BLOCK_TEXTURE_URLS, blockFaces, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
+import { memo, useMemo, useState } from 'react';
+import { BLOCKS, BLOCK_TEXTURE_URLS, MINECRAFT_PACK, blockFaces, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
 import { GLASS, TEXT_COLOR } from '@/common/settings';
 
 function Face({ kind, color }: { kind?: TextureKind; color: string }) {
@@ -43,6 +43,19 @@ interface Props {
 }
 
 const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, glowColor, onSelect, onGlowColorChange, onClose, embedded = false }: Props) {
+    const [query, setQuery] = useState('');
+    const [category, setCategory] = useState('All blocks');
+    const [page, setPage] = useState(0);
+    const categories = useMemo(() => ['All blocks', ...new Set(BLOCKS.map(block => block.category))], []);
+    const matches = useMemo(() => {
+        const search = query.trim().toLowerCase();
+        return BLOCKS.filter(block => (category === 'All blocks' ? block.category !== 'Texture Variants' || search.length > 0 : block.category === category)
+            && (!search || `${block.label} ${block.id}`.toLowerCase().includes(search)));
+    }, [query, category]);
+    const pageSize = 48;
+    const pageCount = Math.max(1, Math.ceil(matches.length / pageSize));
+    const visibleBlocks = matches.slice(page * pageSize, (page + 1) * pageSize);
+    const inputStyle = { width: '100%', boxSizing: 'border-box' as const, border: '1px solid #ffffff25', borderRadius: 6, padding: '8px', background: '#161d25', color: TEXT_COLOR, fontSize: 12 };
     return (
         <section id={id} aria-label="Block library" style={{
             ...(embedded ? {} : GLASS), width: embedded ? '100%' : 'min(260px, calc(100vw - 112px))', padding: embedded ? 0 : 12, boxSizing: 'border-box',
@@ -56,15 +69,17 @@ const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, gl
                     <span aria-hidden="true">×</span>
                 </button>
             </div>
-            <p style={{ fontSize: 10, opacity: 0.6, margin: '5px 0 10px' }}>Choose a block, then click the grid to build.</p>
-            {['Building', 'Lights'].map(group => (
-                <div key={group}>
-                    {group === 'Lights' && <div style={{ margin: '16px 0 10px' }}>
-                        <strong style={{ fontSize: 12 }}>Light blocks</strong>
-                        <p style={{ fontSize: 10, opacity: 0.6, margin: '5px 0 0' }}>A solid glow in any color. Try the Night preset.</p>
-                    </div>}
+            <p style={{ fontSize: 10, opacity: 0.7, margin: '5px 0 10px' }}>Minecraft Bedrock · {MINECRAFT_PACK.blockCount.toLocaleString()} blocks</p>
+            <input type="search" aria-label="Search blocks" placeholder="Search blocks or texture variants…" value={query}
+                onChange={event => { setQuery(event.target.value); setPage(0); }} style={inputStyle} />
+            <select aria-label="Block category" value={category} onChange={event => { setCategory(event.target.value); setPage(0); }} style={{ ...inputStyle, marginTop: 6 }}>
+                {categories.map(value => <option key={value}>{value}</option>)}
+            </select>
+            <p style={{ fontSize: 10, opacity: 0.7 }}>Choose a block, then click the grid. Shaped blocks use cube geometry; animated textures show their first frame.</p>
+            <div aria-live="polite" style={{ fontSize: 10, opacity: 0.7, marginBottom: 8 }}>{matches.length.toLocaleString()} matches · Page {page + 1} of {pageCount}</div>
+                <div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                        {BLOCKS.filter(block => (block.id === BlockId.Glow) === (group === 'Lights')).map(block => (
+                        {visibleBlocks.map(block => (
                             <button key={block.id} type="button" title={block.description}
                                 aria-label={block.label} aria-pressed={activeBlock === block.id}
                                 onClick={() => onSelect(block.id)}
@@ -73,14 +88,14 @@ const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, gl
                                     padding: '6px 2px', cursor: 'pointer', borderRadius: 8, color: TEXT_COLOR,
                                     background: activeBlock === block.id ? 'rgba(208,163,79,0.18)' : 'rgba(255,255,255,0.04)',
                                     border: `1px solid ${activeBlock === block.id ? '#d0a34f' : 'rgba(255,255,255,0.08)'}`,
-                                    font: 'inherit', fontSize: 10,
+                                    font: 'inherit', fontSize: 10, minWidth: 0, overflowWrap: 'anywhere',
                                 }}>
                                 <BlockPreview type={block.id} color={block.id === BlockId.Glow ? glowColor : block.id === BlockId.Custom ? activeColor : block.color} />
                                 {block.label}
                             </button>
                         ))}
                     </div>
-                    {group === 'Lights' && <div style={{ marginTop: 10 }}>
+                    {activeBlock === BlockId.Glow && <div style={{ marginTop: 10 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11 }}>
                             <input type="color" aria-label="Glow color" value={glowColor}
                                 onChange={event => onGlowColorChange(event.target.value)}
@@ -90,7 +105,15 @@ const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, gl
                         <p style={{ fontSize: 10, opacity: 0.6, margin: '7px 0 0' }}>Choose a color for the blocks you place next.</p>
                     </div>}
                 </div>
-            ))}
+            {matches.length === 0 && <p style={{ fontSize: 12 }}>No matching blocks. Try another name or category.</p>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 12 }}>
+                <button type="button" disabled={page === 0} onClick={() => setPage(value => value - 1)} style={{ ...inputStyle, cursor: 'pointer' }}>Previous</button>
+                <button type="button" disabled={page + 1 >= pageCount} onClick={() => setPage(value => value + 1)} style={{ ...inputStyle, cursor: 'pointer' }}>Next</button>
+            </div>
+            <div style={{ fontSize: 10, lineHeight: 1.6, marginTop: 12 }}>
+                <a href="/texture-packs/minecraft-bedrock/minecraft-bedrock.zip" download style={{ color: '#e3b96d' }}>Download texture pack</a>
+                <p style={{ opacity: 0.65, margin: '5px 0 0' }}>Textures © Mojang AB · <a href={MINECRAFT_PACK.source} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Official source</a> · <a href="/texture-packs/minecraft-bedrock/LICENSE.md" style={{ color: 'inherit' }}>Terms</a></p>
+            </div>
         </section>
     );
 });
