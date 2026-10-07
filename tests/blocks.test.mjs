@@ -2,7 +2,6 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import * as THREE from 'three';
-import { BLOCKS, blockFaces, blockEmission } from '../src/features/voxel/blocks.ts';
 
 // Node's native TS runner needs the same aliases as the application bundler.
 registerHooks({
@@ -17,6 +16,7 @@ registerHooks({
     },
 });
 
+const { BLOCKS, blockFaces, blockEmission } = await import('../src/features/voxel/blocks.ts');
 const { createVoxelEngine } = await import('../src/features/rendering/voxelEngine.ts');
 const { createBlockMaterials } = await import('../src/features/rendering/blockMaterials.ts');
 const { MAX_BLOCK_LIGHTS } = await import('../src/features/rendering/blockLights.ts');
@@ -64,6 +64,10 @@ function setup(onHistoryChange, onPick) {
     camera.updateMatrixWorld();
     const listeners = new Map();
     const dom = {
+        ownerDocument: {
+            addEventListener: (name, listener) => listeners.set(name, listener),
+            removeEventListener: name => listeners.delete(name),
+        },
         addEventListener: (name, listener) => listeners.set(name, listener),
         removeEventListener: name => listeners.delete(name),
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 200 }),
@@ -71,6 +75,80 @@ function setup(onHistoryChange, onPick) {
     const engine = createVoxelEngine(scene, camera, dom, '#896344', 'custom', onHistoryChange, onPick);
     return { engine, scene, listeners };
 }
+
+test('box build previews two corners and adds an inclusive region as one undo action', () => {
+    const { engine, scene, listeners } = setup();
+    const click = (x, y) => listeners.get('mousedown')({ button: 0, clientX: x, clientY: y });
+    try {
+        engine.setMode('box');
+        engine.setBlockType('stone');
+        scene.updateMatrixWorld();
+        click(140, 120);
+        assert.deepEqual(engine.exportScene(), [], 'first corner must not edit the scene');
+        assert.equal(engine.getHistoryState().canUndo, false);
+        listeners.get('mousemove')({ clientX: 100, clientY: 100 });
+        const outline = scene.children.find(child => child.isLineSegments && child.visible);
+        assert.deepEqual(outline.scale.toArray(), [3, 1, 2]);
+        click(100, 100);
+        const placed = engine.exportScene();
+        assert.equal(placed.length, 6);
+        assert.deepEqual(placed.map(v => [v.x, v.y, v.z]), [
+            [.5, .5, .5], [.5, .5, 1.5], [1.5, .5, .5],
+            [1.5, .5, 1.5], [2.5, .5, .5], [2.5, .5, 1.5],
+        ]);
+        assert.ok(placed.every(v => v.blockType === 'stone'));
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), []);
+        assert.equal(engine.getHistoryState().canUndo, false);
+        engine.redo();
+        assert.deepEqual(engine.exportScene(), placed);
+    } finally { engine.dispose(); }
+});
+
+test('box build fills height, preserves existing blocks, and restores them on undo', () => {
+    const { engine, scene, listeners } = setup();
+    const original = [{ x: 2.5, y: 2.5, z: .5, color: '#92958c', blockType: 'stone' }];
+    try {
+        engine.importScene(original);
+        engine.setMode('box');
+        engine.setBlockType('glow');
+        engine.setColor('#33aaff');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        listeners.get('mousedown')({ button: 0, clientX: 140, clientY: 100 });
+        const placed = engine.exportScene();
+        assert.equal(placed.length, 12, '3 wide by 4 high, including the existing cell');
+        assert.deepEqual(placed.find(v => v.x === 2.5 && v.y === 2.5), original[0]);
+        assert.ok(placed.slice(1).every(v => v.blockType === 'glow' && v.color === '#33aaff'));
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), original);
+        engine.redo();
+        assert.deepEqual(engine.exportScene(), placed);
+    } finally { engine.dispose(); }
+});
+
+test('box build cancels pending corners on Escape, right-click, tool changes, and undo', () => {
+    for (const cancel of [
+        listeners => listeners.get('keydown')({ key: 'Escape' }),
+        listeners => listeners.get('mousedown')({ button: 2, clientX: 100, clientY: 100 }),
+        (_, engine) => { engine.setMode('draw'); engine.setMode('box'); },
+        (_, engine) => engine.undo(),
+        (_, engine) => engine.clearScene(),
+    ]) {
+        const { engine, scene, listeners } = setup();
+        try {
+            engine.setMode('box');
+            scene.updateMatrixWorld();
+            listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+            cancel(listeners, engine);
+            listeners.get('mousedown')({ button: 0, clientX: 140, clientY: 100 });
+            assert.deepEqual(engine.exportScene(), [], 'next click starts a new selection');
+            listeners.get('mousedown')({ button: 0, clientX: 140, clientY: 100 });
+            assert.equal(engine.exportScene().length, 1, 'same corner adds one block');
+        } finally { engine.dispose(); }
+        assert.equal(listeners.size, 0, 'all event handlers must be removed');
+    }
+});
 
 test('grass and logs have the correct top, side, and bottom textures', () => {
     assert.equal(blockFaces('grass')[2], 'grass_block_top');

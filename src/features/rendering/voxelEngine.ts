@@ -60,6 +60,7 @@ export function createVoxelEngine(
     const blockMaterials = createBlockMaterials();
     const blockLights = createBlockLights(scene);
     let currentMode: Tool = SETTINGS.editor.tool;
+    let boxStart: THREE.Vector3 | null = null;
 
     /** Placed voxel meshes keyed by "x,y,z" */
     const voxels = new Map<string, THREE.Mesh>();
@@ -185,6 +186,7 @@ export function createVoxelEngine(
 
     // Bulk operations are a single undo step; unchanged cells aren't retained.
     function replaceScene(data: VoxelData[]) {
+        cancelBox();
         const next = new Map(data.map(voxel => [cellKey(voxel.x, voxel.y, voxel.z), voxel]));
         const changes: VoxelChange[] = [];
         voxels.forEach((_, key) => changes.push({ key, before: voxelAt(key), after: next.get(key) }));
@@ -247,10 +249,42 @@ export function createVoxelEngine(
 
     // ── Interaction Handlers ─────────────────────────────────
 
+    function previewBox(end: THREE.Vector3) {
+        const start = boxStart ?? end;
+        const size = new THREE.Vector3(
+            Math.abs(start.x - end.x) + 1,
+            Math.abs(start.y - end.y) + 1,
+            Math.abs(start.z - end.z) + 1,
+        );
+        const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+        hoverMesh.position.copy(center);
+        edgeLines.position.copy(center);
+        hoverMesh.scale.copy(size);
+        edgeLines.scale.copy(size);
+        hoverMesh.visible = edgeLines.visible = true;
+    }
+
+    function cancelBox() {
+        boxStart = null;
+        onMouseLeave();
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+        if (event.key === 'Escape') cancelBox();
+    }
+
     function onMouseMove(event: MouseEvent) {
         // Hide erase highlights by default
         eraseHoverMesh.visible = false;
         eraseEdgeLines.visible = false;
+
+        if (currentMode === ToolId.Box) {
+            const { place } = getTargets(event);
+            onMouseLeave();
+            if (place) previewBox(place);
+            else if (boxStart) previewBox(boxStart);
+            return;
+        }
 
         if (currentMode === ToolId.Erase) {
             hoverMesh.visible = false;
@@ -291,6 +325,8 @@ export function createVoxelEngine(
     }
 
     function onMouseLeave() {
+        hoverMesh.scale.setScalar(1);
+        edgeLines.scale.setScalar(1);
         hoverMesh.visible = false;
         edgeLines.visible = false;
         eraseHoverMesh.visible = false;
@@ -303,6 +339,36 @@ export function createVoxelEngine(
     }
 
     function onMouseDown(event: MouseEvent) {
+        if (currentMode === ToolId.Box) {
+            if (event.button === 2) {
+                cancelBox();
+                return;
+            }
+            if (event.button !== 0) return;
+            const { place } = getTargets(event);
+            if (!place) return;
+            if (!boxStart) {
+                boxStart = place.clone();
+                previewBox(place);
+                return;
+            }
+            const min = boxStart.clone().min(place);
+            const max = boxStart.clone().max(place);
+            const changes: VoxelChange[] = [];
+            for (let x = min.x; x <= max.x; x++) {
+                for (let y = min.y; y <= max.y; y++) {
+                    for (let z = min.z; z <= max.z; z++) {
+                        const key = cellKey(x, y, z);
+                        if (!voxels.has(key)) changes.push({ key, after: {
+                            x, y, z, color: currentColor, blockType: currentBlockType,
+                        } });
+                    }
+                }
+            }
+            cancelBox();
+            commit(changes);
+            return;
+        }
         if (event.button === 0 && (currentMode === ToolId.Paint || currentMode === ToolId.Fill || currentMode === ToolId.Pick)) {
             const { hitBlock } = getTargets(event);
             if (!hitBlock) return;
@@ -368,6 +434,7 @@ export function createVoxelEngine(
     domElement.addEventListener('mousemove', onMouseMove);
     domElement.addEventListener('mouseleave', onMouseLeave);
     domElement.addEventListener('mousedown', onMouseDown);
+    domElement.ownerDocument?.addEventListener('keydown', onKeyDown);
     // Prevent context menu from popping up on right click
     const preventContextMenu = (event: Event) => event.preventDefault();
     domElement.addEventListener('contextmenu', preventContextMenu);
@@ -384,6 +451,7 @@ export function createVoxelEngine(
             currentBlockType = isBlockType(type) ? type : BlockId.Custom;
         },
         setMode(mode: Tool) {
+            cancelBox();
             currentMode = mode;
             hoverMesh.visible = false;
             edgeLines.visible = false;
@@ -408,6 +476,7 @@ export function createVoxelEngine(
         },
 
         undo() {
+            cancelBox();
             const changes = undoStack.pop();
             if (!changes) return;
             applyChanges(changes, 'before');
@@ -416,6 +485,7 @@ export function createVoxelEngine(
         },
 
         redo() {
+            cancelBox();
             const changes = redoStack.pop();
             if (!changes) return;
             applyChanges(changes, 'after');
@@ -433,6 +503,7 @@ export function createVoxelEngine(
             domElement.removeEventListener('mousemove', onMouseMove);
             domElement.removeEventListener('mouseleave', onMouseLeave);
             domElement.removeEventListener('mousedown', onMouseDown);
+            domElement.ownerDocument?.removeEventListener('keydown', onKeyDown);
             domElement.removeEventListener('contextmenu', preventContextMenu);
             
             voxels.forEach(mesh => {
@@ -447,6 +518,8 @@ export function createVoxelEngine(
             blockLights.dispose();
             scene.remove(floorMesh, hoverMesh, edgeLines, eraseHoverMesh, eraseEdgeLines);
             boxGeo.dispose();
+            edgeLines.geometry.dispose();
+            eraseEdgeLines.geometry.dispose();
             hoverMat.dispose();
             edgeMat.dispose();
             eraseHoverMat.dispose();

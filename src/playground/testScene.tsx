@@ -66,7 +66,7 @@ export default function Playground() {
             const block = BLOCKS.find(block => block.id === type);
             if (block) setActiveColor(block.color);
         }
-        setActiveTool(current => current === ToolId.Paint || current === ToolId.Fill ? current : ToolId.Draw);
+        setActiveTool(current => current === ToolId.Paint || current === ToolId.Fill || current === ToolId.Box ? current : ToolId.Draw);
     }, [glowColor]);
 
     const handleColorChange = useCallback((color: string) => {
@@ -79,7 +79,7 @@ export default function Playground() {
         setGlowColor(color);
         setActiveColor(color);
         setActiveBlock(BlockId.Glow);
-        setActiveTool(current => current === ToolId.Paint || current === ToolId.Fill ? current : ToolId.Draw);
+        setActiveTool(current => current === ToolId.Paint || current === ToolId.Fill || current === ToolId.Box ? current : ToolId.Draw);
     }, []);
 
     const handlePick = useCallback((voxel: VoxelData) => {
@@ -232,7 +232,7 @@ export default function Playground() {
                 <StatusItem label="Color" value={activeColor.toUpperCase()} />
                 <StatusDot />
                 <StatusItem label="Block" value={BLOCKS.find(block => block.id === activeBlock)?.label ?? ''} />
-                <span className={styles.modeStatus}><StatusDot /><StatusItem label="Mode" value="Isometric" /></span>
+                <span className={styles.modeStatus}><StatusDot /><StatusItem label="Mode" value={activeTool === ToolId.Box ? 'Click two corners · Esc cancels' : 'Isometric'} /></span>
             </div>
         </div>
     );

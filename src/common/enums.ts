@@ -2,6 +2,7 @@
 export enum ToolId {
     Select = 'select',
     Draw = 'draw',
+    Box = 'box',
     Paint = 'paint',
     Erase = 'erase',
     Fill = 'fill',
