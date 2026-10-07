@@ -150,6 +150,77 @@ test('box build cancels pending corners on Escape, right-click, tool changes, an
     }
 });
 
+test('box erase previews the hit cells and removes an inclusive volume in one undo step', () => {
+    const { engine, scene, listeners } = setup();
+    const original = [
+        { x: .5, y: .5, z: .5, color: '#896344', blockType: 'dirt' },
+        { x: 1.5, y: .5, z: .5, color: '#33aaff', blockType: 'glow' },
+        { x: 2.5, y: 2.5, z: 1.5, color: '#92958c', blockType: 'stone' },
+        { x: 2.5, y: 3.5, z: 1.5, color: '#896344', blockType: 'dirt' },
+        { x: 3.5, y: .5, z: .5, color: '#896344', blockType: 'dirt' },
+    ];
+    try {
+        engine.importScene(original);
+        engine.setMode('box-erase');
+        scene.updateMatrixWorld();
+        // First corner is the higher existing block, not its adjacent placement cell.
+        listeners.get('mousedown')({ button: 0, clientX: 140, clientY: 120 });
+        assert.deepEqual(engine.exportScene(), original);
+        listeners.get('mousemove')({ clientX: 100, clientY: 100 });
+        const outline = scene.children.find(child => child.isLineSegments && child.visible);
+        assert.deepEqual(outline.scale.toArray(), [3, 4, 2]);
+        assert.equal(outline.material.color.getHexString(), new THREE.Color('#ff4444').getHexString());
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), [original[4]]);
+        assert.equal(scene.children.filter(child => child.isPointLight && child.intensity > 0).length, 0);
+        engine.undo();
+        assert.deepEqual(engine.exportScene().sort((a, b) => a.x - b.x || a.y - b.y), original);
+        assert.equal(scene.children.filter(child => child.isPointLight && child.intensity > 0).length, 1);
+        engine.redo();
+        assert.deepEqual(engine.exportScene(), [original[4]]);
+    } finally { engine.dispose(); }
+});
+
+test('box erase accepts floor corners and an empty region leaves history unchanged', () => {
+    const { engine, scene, listeners } = setup();
+    const original = [{ x: 1.5, y: .5, z: .5, color: '#896344', blockType: 'dirt' }];
+    const click = x => listeners.get('mousedown')({ button: 0, clientX: x, clientY: 100 });
+    try {
+        engine.importScene(original);
+        engine.setMode('box-erase');
+        scene.updateMatrixWorld();
+        const history = engine.getHistoryState();
+        click(60); click(80);
+        assert.deepEqual(engine.exportScene(), original);
+        assert.deepEqual(engine.getHistoryState(), history);
+        click(100); click(140);
+        assert.deepEqual(engine.exportScene(), []);
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), original);
+    } finally { engine.dispose(); }
+});
+
+test('box erase cancels without deleting and resets the single erase preview', () => {
+    const { engine, scene, listeners } = setup();
+    const original = [0, 1, 2].map(x => ({ x: x + .5, y: .5, z: .5, color: '#896344', blockType: 'dirt' }));
+    try {
+        engine.importScene(original);
+        engine.setMode('box-erase');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        listeners.get('mousemove')({ clientX: 140, clientY: 100 });
+        listeners.get('keydown')({ key: 'Escape' });
+        listeners.get('mousedown')({ button: 0, clientX: 140, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), original);
+        listeners.get('mousedown')({ button: 2, clientX: 100, clientY: 100 });
+        engine.setMode('erase');
+        listeners.get('mousemove')({ clientX: 100, clientY: 100 });
+        const outline = scene.children.find(child => child.isLineSegments && child.visible);
+        assert.deepEqual(outline.scale.toArray(), [1, 1, 1]);
+        assert.deepEqual(engine.exportScene(), original);
+    } finally { engine.dispose(); }
+});
+
 test('grass and logs have the correct top, side, and bottom textures', () => {
     assert.equal(blockFaces('grass')[2], 'grass_block_top');
     assert.equal(blockFaces('grass')[3], 'dirt');

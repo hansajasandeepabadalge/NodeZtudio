@@ -232,7 +232,7 @@ export default function Playground() {
                 <StatusItem label="Color" value={activeColor.toUpperCase()} />
                 <StatusDot />
                 <StatusItem label="Block" value={BLOCKS.find(block => block.id === activeBlock)?.label ?? ''} />
-                <span className={styles.modeStatus}><StatusDot /><StatusItem label="Mode" value={activeTool === ToolId.Box ? 'Click two corners · Esc cancels' : 'Isometric'} /></span>
+                <span className={styles.modeStatus}><StatusDot /><StatusItem label="Mode" value={activeTool === ToolId.Box || activeTool === ToolId.BoxErase ? 'Click two corners · Esc cancels' : 'Isometric'} /></span>
             </div>
         </div>
     );

@@ -257,11 +257,18 @@ export function createVoxelEngine(
             Math.abs(start.z - end.z) + 1,
         );
         const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        hoverMesh.position.copy(center);
-        edgeLines.position.copy(center);
-        hoverMesh.scale.copy(size);
-        edgeLines.scale.copy(size);
-        hoverMesh.visible = edgeLines.visible = true;
+        const mesh = currentMode === ToolId.BoxErase ? eraseHoverMesh : hoverMesh;
+        const edges = currentMode === ToolId.BoxErase ? eraseEdgeLines : edgeLines;
+        mesh.position.copy(center);
+        edges.position.copy(center);
+        mesh.scale.copy(size);
+        edges.scale.copy(size);
+        mesh.visible = edges.visible = true;
+    }
+
+    function boxTarget(event: MouseEvent) {
+        const { place, hitBlock } = getTargets(event);
+        return currentMode === ToolId.BoxErase ? hitBlock ?? place : place;
     }
 
     function cancelBox() {
@@ -278,8 +285,8 @@ export function createVoxelEngine(
         eraseHoverMesh.visible = false;
         eraseEdgeLines.visible = false;
 
-        if (currentMode === ToolId.Box) {
-            const { place } = getTargets(event);
+        if (currentMode === ToolId.Box || currentMode === ToolId.BoxErase) {
+            const place = boxTarget(event);
             onMouseLeave();
             if (place) previewBox(place);
             else if (boxStart) previewBox(boxStart);
@@ -327,6 +334,8 @@ export function createVoxelEngine(
     function onMouseLeave() {
         hoverMesh.scale.setScalar(1);
         edgeLines.scale.setScalar(1);
+        eraseHoverMesh.scale.setScalar(1);
+        eraseEdgeLines.scale.setScalar(1);
         hoverMesh.visible = false;
         edgeLines.visible = false;
         eraseHoverMesh.visible = false;
@@ -339,13 +348,13 @@ export function createVoxelEngine(
     }
 
     function onMouseDown(event: MouseEvent) {
-        if (currentMode === ToolId.Box) {
+        if (currentMode === ToolId.Box || currentMode === ToolId.BoxErase) {
             if (event.button === 2) {
                 cancelBox();
                 return;
             }
             if (event.button !== 0) return;
-            const { place } = getTargets(event);
+            const place = boxTarget(event);
             if (!place) return;
             if (!boxStart) {
                 boxStart = place.clone();
@@ -355,7 +364,15 @@ export function createVoxelEngine(
             const min = boxStart.clone().min(place);
             const max = boxStart.clone().max(place);
             const changes: VoxelChange[] = [];
-            for (let x = min.x; x <= max.x; x++) {
+            if (currentMode === ToolId.BoxErase) {
+                // Scan existing cells so empty space in a large box costs no extra work.
+                voxels.forEach((mesh, key) => {
+                    const { x, y, z } = mesh.position;
+                    if (x >= min.x && x <= max.x && y >= min.y && y <= max.y && z >= min.z && z <= max.z) {
+                        changes.push({ key, before: voxelAt(key) });
+                    }
+                });
+            } else for (let x = min.x; x <= max.x; x++) {
                 for (let y = min.y; y <= max.y; y++) {
                     for (let z = min.z; z <= max.z; z++) {
                         const key = cellKey(x, y, z);

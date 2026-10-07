@@ -17,7 +17,7 @@ export const SETTINGS = {
     renderer: { antialias: true, maxPixelRatio: 2, exposure: 1, shadowsEnabled: true },
     editor: { tool: ToolId.Select, block: BlockId.Custom, color: '#95704b', glowColor: '#ffad42', showGrid: true, historyLimit: 100 },
     shortcuts: {
-        tools: { [ToolId.Select]: 'V', [ToolId.Draw]: 'B', [ToolId.Box]: 'X', [ToolId.Paint]: 'P', [ToolId.Erase]: 'E', [ToolId.Fill]: 'F', [ToolId.Pick]: 'I' },
+        tools: { [ToolId.Select]: 'V', [ToolId.Draw]: 'B', [ToolId.Box]: 'X', [ToolId.BoxErase]: 'C', [ToolId.Paint]: 'P', [ToolId.Erase]: 'E', [ToolId.Fill]: 'F', [ToolId.Pick]: 'I' },
         grid: 'G', reset: 'R', undo: 'Z', redo: 'Y', save: 'S',
     },
     lighting: {

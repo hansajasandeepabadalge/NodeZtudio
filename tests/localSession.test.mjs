@@ -42,7 +42,7 @@ test('saving an empty scene replaces previous blocks instead of bringing them ba
 
 test('new tool selections and grid visibility persist while older sessions still load', () => {
     const storage = memoryStorage();
-    for (const activeTool of ['paint', 'fill', 'pick']) {
+    for (const activeTool of ['paint', 'fill', 'pick', 'box', 'box-erase']) {
         const session = { ...snapshot, activeTool, showGrid: false };
         saveLocalSession(storage, session);
         assert.deepEqual(readLocalSession(storage), session);

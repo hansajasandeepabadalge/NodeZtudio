@@ -2,6 +2,7 @@ const paths = {
     select: 'M4 3l7 18 3-7 7-3z',
     draw: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
     box: 'M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16',
+    'box-erase': 'M4 4h16v16H4zM8 8l8 8M8 16l8-8',
     paint: 'M14 3l7 7-5 5-7-7zM9 8l-3 3 7 7 3-3M6 15l-3 3v3h3l4-4',
     erase: 'M20 20H7l-4-4L13 6l7 7-7 7M7 12l7 7',
     fill: 'M4 11l7-7 9 9-7 7zM4 11l9 2h7M9 2l5 5M21 17v4',
