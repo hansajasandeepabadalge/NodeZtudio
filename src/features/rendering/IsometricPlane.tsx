@@ -37,6 +37,7 @@ interface IsometricPlaneProps {
     onHistoryChange?: (state: HistoryState) => void;
     onPick?: (voxel: VoxelData) => void;
     showGrid?: boolean;
+    placementRotation?: number;
 }
 
 const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(function IsometricPlane({
@@ -49,6 +50,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
     onHistoryChange,
     onPick,
     showGrid = SETTINGS.editor.showGrid,
+    placementRotation = 0,
 }, ref) {
     const mountRef     = useRef<HTMLDivElement>(null);
     const engineRef    = useRef<ReturnType<typeof createVoxelEngine> | null>(null);
@@ -101,6 +103,8 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         engineRef.current?.setBlockType(activeBlock);
     }, [activeBlock]);
 
+    useEffect(() => { engineRef.current?.setRotation(placementRotation); }, [placementRotation]);
+
     // ── Sync active tool ───────────────────────────────────
     useEffect(() => {
         toolRef.current = activeTool;
@@ -146,6 +150,7 @@ const IsometricPlane = forwardRef<IsometricPlaneHandle, IsometricPlaneProps>(fun
         engineRef.current = createVoxelEngine(scene, camera, renderer.domElement, activeColor, activeBlock,
             state => onHistoryChangeRef.current?.(state), voxel => onPickRef.current?.(voxel));
         engineRef.current.setMode(toolRef.current);
+        engineRef.current.setRotation(placementRotation);
 
         // ── Reset animation ────────────────────────────────
         let isResetting = false;

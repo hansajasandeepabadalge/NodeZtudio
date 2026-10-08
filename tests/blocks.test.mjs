@@ -66,8 +66,8 @@ function setup(onHistoryChange, onPick) {
     const listeners = new Map();
     const dom = {
         ownerDocument: {
-            addEventListener: (name, listener) => listeners.set(name, listener),
-            removeEventListener: name => listeners.delete(name),
+            addEventListener: (name, listener) => listeners.set(name === 'mousemove' ? 'document:mousemove' : name, listener),
+            removeEventListener: name => listeners.delete(name === 'mousemove' ? 'document:mousemove' : name),
         },
         addEventListener: (name, listener) => listeners.set(name, listener),
         removeEventListener: name => listeners.delete(name),
@@ -159,6 +159,121 @@ test('every door and door texture variant has the full shape and its own matchin
             assert.equal(isDoor(block.id), false);
             assert.equal(blockHeight(block.id), 1);
         }
+    } finally { engine.dispose(); }
+});
+
+test('placement rotation matches the textured preview and survives rotate, undo, and reload', () => {
+    const { engine, scene, listeners } = setup();
+    try {
+        engine.setMode('draw');
+        engine.setBlockType('minecraft:furnace');
+        engine.setRotation(1);
+        scene.updateMatrixWorld();
+        listeners.get('mousemove')({ clientX: 100, clientY: 100 });
+        const preview = scene.children.find(child => child.isMesh && child.visible && Array.isArray(child.material) && child.material[0].opacity === .55);
+        assert.equal(preview.rotation.y, Math.PI / 2);
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        const original = engine.exportScene();
+        assert.equal(original[0].rotation, 1);
+        engine.setMode('rotate');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        assert.equal(engine.exportScene()[0].rotation, 2);
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), original);
+        engine.redo();
+        assert.equal(engine.exportScene()[0].rotation, 2);
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100, shiftKey: true });
+        assert.equal(engine.exportScene()[0].rotation, 1);
+        engine.importScene(JSON.parse(JSON.stringify(original)));
+        assert.equal(scene.children.find(child => child.userData.voxel).rotation.y, Math.PI / 2);
+        for (const rotation of [-1, 4, 1.5, '1']) {
+            assert.throws(() => engine.importScene([{ ...original[0], rotation }]));
+            assert.deepEqual(engine.exportScene(), original);
+        }
+    } finally { engine.dispose(); }
+});
+
+test('dragging a rotated lamp is one undo step and moves its light and saved position', () => {
+    const { engine, scene, listeners } = setup();
+    const source = { x: .5, y: 1.5, z: .5, blockType: 'glow', color: '#33aaff', rotation: 3 };
+    try {
+        engine.importScene([source]);
+        engine.setMode('move');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        listeners.get('mousemove')({ clientX: 140, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), [source], 'preview must not change saved data');
+        assert.equal(scene.children.find(child => child.userData.voxel).position.x, 2.5);
+        listeners.get('mouseup')({ button: 0, clientX: 140, clientY: 100 });
+        const moved = { ...source, x: 2.5 };
+        assert.deepEqual(engine.exportScene(), [moved]);
+        engine.updateLighting();
+        assert.deepEqual(scene.children.find(child => child.isPointLight && child.intensity > 0).position.toArray(), [2.5, 1.5, .5]);
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), [source]);
+        engine.redo();
+        assert.deepEqual(engine.exportScene(), [moved]);
+    } finally { engine.dispose(); }
+});
+
+test('blocked drags, out-of-grid drops, and Escape cancel without changing history', () => {
+    const { engine, scene, listeners } = setup();
+    const original = [
+        { x: .5, y: .5, z: .5, blockType: 'stone', color: '#92958c' },
+        { x: 2.5, y: .5, z: .5, blockType: 'minecraft:wooden_door', color: '#8b6c3e' },
+    ];
+    try {
+        engine.importScene(original);
+        engine.setMode('move');
+        const history = engine.getHistoryState();
+        for (const endX of [140, 500]) {
+            scene.updateMatrixWorld();
+            listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+            listeners.get('mousemove')({ clientX: endX, clientY: 100 });
+            listeners.get('mouseup')({ button: 0, clientX: endX, clientY: 100 });
+            assert.deepEqual(engine.exportScene(), original);
+            assert.deepEqual(engine.getHistoryState(), history);
+        }
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        listeners.get('document:mousemove')({ clientX: 120, clientY: 100 });
+        listeners.get('keydown')({ key: 'Escape' });
+        listeners.get('mouseup')({ button: 0, clientX: 120, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), original);
+        assert.equal(scene.children.find(child => child.userData.voxel?.x === .5).position.x, .5);
+    } finally { engine.dispose(); }
+});
+
+test('rotated doors place neighbors along world normals and keep both cells when dragged', () => {
+    const { engine, scene, listeners, camera } = setup();
+    const source = { x: .5, y: .5, z: .5, blockType: 'minecraft:wooden_door', color: '#8b6c3e', rotation: 1 };
+    try {
+        engine.importScene([source]);
+        camera.up.set(0, 1, 0);
+        camera.position.set(10, 1.5, .5);
+        camera.lookAt(0, 1.5, .5);
+        camera.updateMatrixWorld();
+        scene.updateMatrixWorld();
+        engine.setMode('draw');
+        engine.setBlockType('stone');
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        assert.deepEqual(engine.exportScene()[1], { x: 1.5, y: 1.5, z: .5, color: '#896344', blockType: 'stone' });
+        const blocker = { x: 2.5, y: 1.5, z: .5, blockType: 'stone', color: '#92958c' };
+        engine.importScene([source, blocker]);
+        camera.up.set(0, 0, -1);
+        camera.position.set(.1, 10, .5);
+        camera.lookAt(.1, 0, .5);
+        camera.updateMatrixWorld();
+        scene.updateMatrixWorld();
+        engine.setMode('move');
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        listeners.get('mouseup')({ button: 0, clientX: 140, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), [source, blocker], 'upper half must prevent a blocked drop');
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        listeners.get('mouseup')({ button: 0, clientX: 120, clientY: 100 });
+        assert.deepEqual(engine.exportScene().find(voxel => voxel.blockType === source.blockType), { ...source, x: 1.5 });
+        engine.undo();
+        assert.deepEqual(engine.exportScene().find(voxel => voxel.blockType === source.blockType), source);
     } finally { engine.dispose(); }
 });
 

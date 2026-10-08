@@ -35,6 +35,7 @@ export interface VoxelEngine {
     setColor(hex: string): void;
     setBlockType(type: BlockType): void;
     setMode(mode: Tool): void;
+    setRotation(rotation: number): void;
     exportScene(): VoxelData[];
     importScene(data: VoxelData[]): void;
     clearScene(): void;
@@ -62,6 +63,9 @@ export function createVoxelEngine(
     const blockLights = createBlockLights(scene);
     let currentMode: Tool = SETTINGS.editor.tool;
     let boxStart: THREE.Vector3 | null = null;
+    let currentRotation = 0;
+    let lastMouseEvent: MouseEvent | undefined;
+    let drag: { key: string; source: VoxelData; start: THREE.Vector3; target: THREE.Vector3; valid: boolean } | null = null;
 
     /** Placed voxel meshes keyed by "x,y,z" */
     const voxels = new Map<string, THREE.Mesh>();
@@ -92,6 +96,29 @@ export function createVoxelEngine(
     const hoverMesh = new THREE.Mesh(boxGeo, hoverMat);
     hoverMesh.visible = false;
     scene.add(hoverMesh);
+
+    function ghostMaterials() {
+        const original = blockMaterials.get(currentBlockType, currentColor);
+        const clone = (material: THREE.MeshStandardMaterial) => {
+            const ghost = material.clone();
+            ghost.transparent = true;
+            ghost.opacity = .55;
+            ghost.depthWrite = false;
+            return ghost;
+        };
+        return Array.isArray(original) ? original.map(clone) : clone(original);
+    }
+    const placementPreview = new THREE.Mesh(createBlockGeometry(currentBlockType), ghostMaterials());
+    placementPreview.visible = false;
+    scene.add(placementPreview);
+    function refreshPlacementPreview() {
+        placementPreview.geometry.dispose();
+        const materials = Array.isArray(placementPreview.material) ? placementPreview.material : [placementPreview.material];
+        materials.forEach(material => material.dispose());
+        placementPreview.geometry = createBlockGeometry(currentBlockType);
+        placementPreview.material = ghostMaterials();
+        if (lastMouseEvent) onMouseMove(lastMouseEvent);
+    }
 
     const edgeMat = new THREE.LineBasicMaterial({
         color: SETTINGS.hover.edgeColor,
@@ -132,7 +159,7 @@ export function createVoxelEngine(
     }
 
     function addVoxel(data: VoxelData) {
-        const { x, y, z, color, blockType = BlockId.Custom } = data;
+        const { x, y, z, color, blockType = BlockId.Custom, rotation = 0 } = data;
         const key = cellKey(x, y, z);
         const existing = voxels.get(key);
         if (existing) {
@@ -143,7 +170,8 @@ export function createVoxelEngine(
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.position.set(x, y, z);
-        mesh.userData.voxel = { x, y, z, color, blockType } satisfies VoxelData;
+        mesh.rotation.y = rotation * Math.PI / 2;
+        mesh.userData.voxel = { x, y, z, color, blockType, ...(data.rotation !== undefined ? { rotation } : {}) } satisfies VoxelData;
         scene.add(mesh);
         voxels.set(key, mesh);
         blockLights.set(key, mesh.position, blockType, color);
@@ -165,6 +193,7 @@ export function createVoxelEngine(
     }
 
     function canPlace(x: number, y: number, z: number, type: BlockType, ignore?: string) {
+        if (Math.abs(x) > HALF_GRID || Math.abs(z) > HALF_GRID || y <= 0) return false;
         for (let dy = 0; dy < blockHeight(type); dy++) {
             const key = cellKey(x, y + dy, z);
             const below = cellKey(x, y + dy - 1, z);
@@ -174,11 +203,13 @@ export function createVoxelEngine(
         return true;
     }
 
-    function previewCell(mesh: THREE.Object3D, edges: THREE.Object3D, cell: THREE.Vector3, type: BlockType) {
+    function previewCell(mesh: THREE.Object3D, edges: THREE.Object3D, cell: THREE.Vector3, type: BlockType, rotation = 0) {
         const door = isDoor(type);
         mesh.scale.set(1, blockHeight(type), door ? 3 / 16 : 1);
         edges.scale.copy(mesh.scale);
-        mesh.position.copy(cell).add(new THREE.Vector3(0, door ? .5 : 0, door ? -13 / 32 : 0));
+        mesh.rotation.set(0, rotation * Math.PI / 2, 0);
+        edges.rotation.copy(mesh.rotation);
+        mesh.position.copy(cell).add(new THREE.Vector3(0, door ? .5 : 0, door ? -13 / 32 : 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), mesh.rotation.y));
         edges.position.copy(mesh.position);
     }
 
@@ -194,7 +225,8 @@ export function createVoxelEngine(
 
     function commit(changes: VoxelChange[]) {
         const changed = changes.filter(({ before, after }) =>
-            before?.color !== after?.color || before?.blockType !== after?.blockType);
+            before?.color !== after?.color || before?.blockType !== after?.blockType ||
+            (before?.rotation ?? 0) !== (after?.rotation ?? 0));
         if (changed.length === 0) return;
         applyChanges(changed, 'after');
         undoStack.push(changed);
@@ -250,14 +282,18 @@ export function createVoxelEngine(
         // Calculate the place target (adjacent cell)
         const normal = hit.face?.normal.clone() || new THREE.Vector3(0, 1, 0);
         if (isFloor) normal.set(0, 1, 0);
+        else normal.transformDirection(hit.object.matrixWorld);
+        normal.round();
 
         const pos = hit.point.clone().add(normal.multiplyScalar(0.5));
 
         // Snap to grid
-        const cellX = Math.floor(pos.x) + 0.5;
+        const doorHit = !isFloor && isDoor(hit.object.userData.voxel?.blockType);
+        const cellX = doorHit && Math.abs(normal.x) > .9 / 2
+            ? hit.object.position.x + Math.sign(normal.x) : Math.floor(pos.x) + 0.5;
         const cellY = Math.floor(pos.y) + 0.5;
         // A thin door face still places neighbors in the adjacent grid cell.
-        const cellZ = !isFloor && isDoor(hit.object.userData.voxel?.blockType) && normal.z !== 0
+        const cellZ = doorHit && Math.abs(normal.z) > .9 / 2
             ? hit.object.position.z + Math.sign(normal.z)
             : Math.floor(pos.z) + 0.5;
 
@@ -289,6 +325,8 @@ export function createVoxelEngine(
         edges.position.copy(center);
         mesh.scale.copy(size);
         edges.scale.copy(size);
+        mesh.rotation.set(0, 0, 0);
+        edges.rotation.set(0, 0, 0);
         mesh.visible = edges.visible = true;
     }
 
@@ -298,6 +336,7 @@ export function createVoxelEngine(
     }
 
     function cancelBox() {
+        cancelDrag();
         boxStart = null;
         onMouseLeave();
     }
@@ -306,7 +345,52 @@ export function createVoxelEngine(
         if (event.key === 'Escape') cancelBox();
     }
 
+    function dragPoint(event: MouseEvent, y: number) {
+        const rect = domElement.getBoundingClientRect();
+        mouseNDC.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
+        raycaster.setFromCamera(mouseNDC, camera);
+        return raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3());
+    }
+
+    function cancelDrag() {
+        if (!drag) return;
+        voxels.get(drag.key)?.position.set(drag.source.x, drag.source.y, drag.source.z);
+        voxels.get(drag.key)?.updateMatrixWorld();
+        drag = null;
+        if (domElement.style) domElement.style.cursor = '';
+    }
+
+    function updateDrag(event: MouseEvent) {
+        if (!drag) return;
+        const point = dragPoint(event, drag.source.y - .5);
+        if (!point) { drag.valid = false; return; }
+        const target = point.sub(drag.start).add(new THREE.Vector3(drag.source.x, drag.source.y, drag.source.z));
+        target.set(Math.floor(target.x) + .5, drag.source.y, Math.floor(target.z) + .5);
+        drag.target.copy(target);
+        drag.valid = canPlace(target.x, target.y, target.z, drag.source.blockType ?? BlockId.Custom, drag.key);
+        const mesh = voxels.get(drag.key);
+        if (mesh) { mesh.position.copy(target); mesh.updateMatrixWorld(); }
+        previewCell(hoverMesh, edgeLines, target, drag.source.blockType ?? BlockId.Custom, drag.source.rotation);
+        edgeMat.color.set(drag.valid ? SETTINGS.hover.edgeColor : SETTINGS.hover.eraseEdgeColor);
+        hoverMesh.visible = false;
+        edgeLines.visible = true;
+    }
+
+    function onMouseUp(event: MouseEvent) {
+        if (!drag || event.button !== 0) return;
+        updateDrag(event);
+        const { key, source, target, valid } = drag;
+        cancelDrag();
+        if (valid && (target.x !== source.x || target.z !== source.z)) {
+            commit([{ key, before: source }, { key: cellKey(target.x, target.y, target.z), after: { ...source, x: target.x, y: target.y, z: target.z } }]);
+        }
+        onMouseLeave();
+    }
+
     function onMouseMove(event: MouseEvent) {
+        lastMouseEvent = event;
+        placementPreview.visible = false;
+        if (drag) { updateDrag(event); return; }
         // Hide erase highlights by default
         eraseHoverMesh.visible = false;
         eraseEdgeLines.visible = false;
@@ -324,7 +408,8 @@ export function createVoxelEngine(
             edgeLines.visible = false;
             const { hitBlock } = getTargets(event);
             if (hitBlock) {
-                previewCell(eraseHoverMesh, eraseEdgeLines, hitBlock, voxelAt(cellKey(hitBlock.x, hitBlock.y, hitBlock.z))?.blockType ?? BlockId.Custom);
+                const voxel = voxelAt(cellKey(hitBlock.x, hitBlock.y, hitBlock.z));
+                previewCell(eraseHoverMesh, eraseEdgeLines, hitBlock, voxel?.blockType ?? BlockId.Custom, voxel?.rotation);
                 eraseHoverMesh.visible = true;
                 eraseEdgeLines.visible = true;
             }
@@ -336,7 +421,8 @@ export function createVoxelEngine(
         if (currentMode !== ToolId.Draw) {
             // Select mode: only show highlight on hit block
             if (hitBlock) {
-                previewCell(hoverMesh, edgeLines, hitBlock, voxelAt(cellKey(hitBlock.x, hitBlock.y, hitBlock.z))?.blockType ?? BlockId.Custom);
+                const voxel = voxelAt(cellKey(hitBlock.x, hitBlock.y, hitBlock.z));
+                previewCell(hoverMesh, edgeLines, hitBlock, voxel?.blockType ?? BlockId.Custom, voxel?.rotation);
                 hoverMesh.visible = true;
                 edgeLines.visible = true;
             } else {
@@ -347,12 +433,15 @@ export function createVoxelEngine(
             // Draw mode: only show white border outline at the place target
             hoverMesh.visible = false;
             if (place) {
-                previewCell(hoverMesh, edgeLines, place, currentBlockType);
+                previewCell(hoverMesh, edgeLines, place, currentBlockType, currentRotation);
                 if (!canPlace(place.x, place.y, place.z, currentBlockType)) {
                     edgeLines.visible = false;
                     return;
                 }
                 edgeLines.visible = true;
+                placementPreview.position.copy(place);
+                placementPreview.rotation.y = currentRotation * Math.PI / 2;
+                placementPreview.visible = true;
             } else {
                 edgeLines.visible = false;
             }
@@ -360,6 +449,9 @@ export function createVoxelEngine(
     }
 
     function onMouseLeave() {
+        placementPreview.visible = false;
+        edgeMat.color.set(SETTINGS.hover.edgeColor);
+        for (const preview of [hoverMesh, edgeLines, eraseHoverMesh, eraseEdgeLines]) preview.rotation.set(0, 0, 0);
         hoverMesh.scale.setScalar(1);
         edgeLines.scale.setScalar(1);
         eraseHoverMesh.scale.setScalar(1);
@@ -376,6 +468,27 @@ export function createVoxelEngine(
     }
 
     function onMouseDown(event: MouseEvent) {
+        lastMouseEvent = event;
+        if (event.button === 2 && drag) { cancelBox(); return; }
+        if (event.button === 0 && (currentMode === ToolId.Rotate || currentMode === ToolId.Move)) {
+            const { hitBlock } = getTargets(event);
+            if (!hitBlock) return;
+            const key = cellKey(hitBlock.x, hitBlock.y, hitBlock.z);
+            const source = voxelAt(key);
+            if (!source) return;
+            if (currentMode === ToolId.Rotate) {
+                const rotation = ((source.rotation ?? 0) + (event.shiftKey ? 3 : 1)) % 4;
+                commit([{ key, before: source, after: { ...source, rotation } }]);
+                onMouseMove(event);
+            } else {
+                const start = dragPoint(event, source.y - .5);
+                if (start) {
+                    drag = { key, source, start, target: hitBlock.clone(), valid: true };
+                    if (domElement.style) domElement.style.cursor = 'grabbing';
+                }
+            }
+            return;
+        }
         if (currentMode === ToolId.Box || currentMode === ToolId.BoxErase) {
             if (event.button === 2) {
                 cancelBox();
@@ -405,7 +518,7 @@ export function createVoxelEngine(
                     for (let z = min.z; z <= max.z; z++) {
                         const key = cellKey(x, y, z);
                         if (canPlace(x, y, z, currentBlockType)) changes.push({ key, after: {
-                            x, y, z, color: currentColor, blockType: currentBlockType,
+                            x, y, z, color: currentColor, blockType: currentBlockType, ...(currentRotation ? { rotation: currentRotation } : {}),
                         } });
                     }
                 }
@@ -470,7 +583,7 @@ export function createVoxelEngine(
             if (place && canPlace(place.x, place.y, place.z, currentBlockType)) {
                 const key = cellKey(place.x, place.y, place.z);
                 commit([{ key, before: voxelAt(key), after: {
-                    x: place.x, y: place.y, z: place.z, color: currentColor, blockType: currentBlockType,
+                    x: place.x, y: place.y, z: place.z, color: currentColor, blockType: currentBlockType, ...(currentRotation ? { rotation: currentRotation } : {}),
                 } }]);
 
                 onMouseMove(event);
@@ -482,6 +595,10 @@ export function createVoxelEngine(
     domElement.addEventListener('mouseleave', onMouseLeave);
     domElement.addEventListener('mousedown', onMouseDown);
     domElement.ownerDocument?.addEventListener('keydown', onKeyDown);
+    domElement.ownerDocument?.addEventListener('mouseup', onMouseUp);
+    domElement.ownerDocument?.addEventListener('mousemove', onDocumentMove);
+    domElement.ownerDocument?.defaultView?.addEventListener('blur', cancelBox);
+    function onDocumentMove(event: MouseEvent) { if (drag && event.target !== domElement) updateDrag(event); }
     // Prevent context menu from popping up on right click
     const preventContextMenu = (event: Event) => event.preventDefault();
     domElement.addEventListener('contextmenu', preventContextMenu);
@@ -493,9 +610,11 @@ export function createVoxelEngine(
             currentColor = hex;
             const c = new THREE.Color(hex);
             hoverMat.color.copy(c);
+            refreshPlacementPreview();
         },
         setBlockType(type: BlockType) {
             currentBlockType = isBlockType(type) ? type : BlockId.Custom;
+            refreshPlacementPreview();
         },
         setMode(mode: Tool) {
             cancelBox();
@@ -504,6 +623,10 @@ export function createVoxelEngine(
             edgeLines.visible = false;
             eraseHoverMesh.visible = false;
             eraseEdgeLines.visible = false;
+        },
+        setRotation(rotation: number) {
+            currentRotation = ((Math.round(rotation) % 4) + 4) % 4;
+            if (lastMouseEvent) onMouseMove(lastMouseEvent);
         },
 
         exportScene(): VoxelData[] {
@@ -551,6 +674,10 @@ export function createVoxelEngine(
             domElement.removeEventListener('mouseleave', onMouseLeave);
             domElement.removeEventListener('mousedown', onMouseDown);
             domElement.ownerDocument?.removeEventListener('keydown', onKeyDown);
+            cancelDrag();
+            domElement.ownerDocument?.removeEventListener('mouseup', onMouseUp);
+            domElement.ownerDocument?.removeEventListener('mousemove', onDocumentMove);
+            domElement.ownerDocument?.defaultView?.removeEventListener('blur', cancelBox);
             domElement.removeEventListener('contextmenu', preventContextMenu);
             
             voxels.forEach(mesh => {
@@ -560,6 +687,10 @@ export function createVoxelEngine(
             voxels.clear();
 
             blockMaterials.dispose();
+            placementPreview.geometry.dispose();
+            const ghost = Array.isArray(placementPreview.material) ? placementPreview.material : [placementPreview.material];
+            ghost.forEach(material => material.dispose());
+            scene.remove(placementPreview);
             undoStack.length = 0;
             redoStack.length = 0;
             blockLights.dispose();

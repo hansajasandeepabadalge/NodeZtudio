@@ -18,6 +18,7 @@ import styles from '@/components/editor/EditorWorkspace.module.css';
 // ── Component ──────────────────────────────────────────────
 export default function Playground() {
     const [activeTool, setActiveTool] = useState<Tool>(SETTINGS.editor.tool);
+    const [placementRotation, setPlacementRotation] = useState(0);
     const [activeColor, setActiveColor] = useState<string>(DEFAULT_COLOR);
     const [activeBlock, setActiveBlock] = useState<BlockType>(SETTINGS.editor.block);
     const [glowColor, setGlowColor] = useState<string>(DEFAULT_GLOW_COLOR);
@@ -28,11 +29,11 @@ export default function Playground() {
     const resetFnRef = useRef<(() => void) | null>(null);
     const planeRef   = useRef<IsometricPlaneHandle>(null);
     const [localSaveStatus, setLocalSaveStatus] = useState<SaveStatus>(SaveStatus.Enabled);
-    const sessionRef = useRef<Omit<LocalSession, 'voxels'>>({ activeTool, activeColor, activeBlock, glowColor, lighting, showGrid });
+    const sessionRef = useRef<Omit<LocalSession, 'voxels'>>({ activeTool, activeColor, activeBlock, glowColor, lighting, showGrid, placementRotation });
 
     useEffect(() => {
-        sessionRef.current = { activeTool, activeColor, activeBlock, glowColor, lighting: { ...lighting, time: currentTime }, showGrid };
-    }, [activeTool, activeColor, activeBlock, glowColor, lighting, currentTime, showGrid]);
+        sessionRef.current = { activeTool, activeColor, activeBlock, glowColor, lighting: { ...lighting, time: currentTime }, showGrid, placementRotation };
+    }, [activeTool, activeColor, activeBlock, glowColor, lighting, currentTime, showGrid, placementRotation]);
 
     useEffect(() => {
         const save = () => {
@@ -83,6 +84,7 @@ export default function Playground() {
     }, []);
 
     const handlePick = useCallback((voxel: VoxelData) => {
+        setPlacementRotation(voxel.rotation ?? 0);
         setActiveBlock(voxel.blockType ?? BlockId.Custom);
         setActiveColor(voxel.color);
         if (voxel.blockType === BlockId.Glow) setGlowColor(voxel.color);
@@ -102,6 +104,7 @@ export default function Playground() {
             if (!session) return;
             planeRef.current?.importScene(session.voxels);
             setActiveTool(session.activeTool);
+            setPlacementRotation(session.placementRotation ?? 0);
             setActiveBlock(session.activeBlock);
             setActiveColor(session.activeColor);
             setGlowColor(session.glowColor);
@@ -171,6 +174,11 @@ export default function Playground() {
                 else if (key === SETTINGS.shortcuts.save.toLowerCase()) { event.preventDefault(); handleSave(); }
                 return;
             }
+            if (key === SETTINGS.shortcuts.rotatePlacement.toLowerCase()) {
+                event.preventDefault();
+                setPlacementRotation(value => (value + (event.shiftKey ? 3 : 1)) % 4);
+                return;
+            }
             if (event.shiftKey) return;
             const tool = TOOLS.find(item => item.key.toLowerCase() === key);
             if (tool) { event.preventDefault(); setActiveTool(tool.id); }
@@ -192,6 +200,7 @@ export default function Playground() {
                     activeColor={activeColor}
                     activeBlock={activeBlock}
                     activeTool={activeTool}
+                    placementRotation={placementRotation}
                     lighting={lighting}
                     onTimeChange={setCurrentTime}
                     onHistoryChange={setHistory}
@@ -232,7 +241,8 @@ export default function Playground() {
                 <StatusItem label="Color" value={activeColor.toUpperCase()} />
                 <StatusDot />
                 <StatusItem label="Block" value={BLOCKS.find(block => block.id === activeBlock)?.label ?? ''} />
-                <span className={styles.modeStatus}><StatusDot /><StatusItem label="Mode" value={activeTool === ToolId.Box || activeTool === ToolId.BoxErase ? 'Click two corners · Esc cancels' : 'Isometric'} /></span>
+                <StatusDot /><StatusItem label="Next turn" value={`${placementRotation * 90}° · Q`} />
+                <span className={styles.modeStatus}><StatusDot /><StatusItem label="Mode" value={activeTool === ToolId.Move ? 'Drag to move · Esc cancels' : activeTool === ToolId.Rotate ? 'Click to turn · Shift reverses' : activeTool === ToolId.Draw ? 'Q turns preview · Click places' : activeTool === ToolId.Box || activeTool === ToolId.BoxErase ? 'Click two corners · Esc cancels' : 'Isometric'} /></span>
             </div>
         </div>
     );

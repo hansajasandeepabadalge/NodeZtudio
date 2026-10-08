@@ -13,6 +13,7 @@ export interface LocalSession {
     glowColor: string;
     lighting: LightingSettings;
     showGrid?: boolean;
+    placementRotation?: number;
 }
 
 const isColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
@@ -27,6 +28,7 @@ export function readLocalSession(storage: Pick<Storage, 'getItem'>): LocalSessio
         if (!data || data.version !== SETTINGS.storage.version || !isBlockType(data.activeBlock) ||
             !isTool(data.activeTool) ||
             (data.showGrid !== undefined && typeof data.showGrid !== 'boolean') ||
+            (data.placementRotation !== undefined && (!Number.isInteger(data.placementRotation) || data.placementRotation < 0 || data.placementRotation > 3)) ||
             !isColor(data.activeColor) || !isColor(data.glowColor)) return undefined;
         const lighting = data.lighting;
         if (!lighting || typeof lighting.automatic !== 'boolean' ||
@@ -38,6 +40,7 @@ export function readLocalSession(storage: Pick<Storage, 'getItem'>): LocalSessio
             activeColor: data.activeColor, glowColor: data.glowColor,
             lighting: { automatic: lighting.automatic, time: lighting.time, cycleSeconds: lighting.cycleSeconds, brightness: lighting.brightness },
             ...(data.showGrid !== undefined ? { showGrid: data.showGrid } : {}),
+            ...(data.placementRotation !== undefined ? { placementRotation: data.placementRotation } : {}),
         };
     } catch {
         return undefined;

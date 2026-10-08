@@ -121,6 +121,8 @@ export interface VoxelData {
     z: number;
     color: string;
     blockType?: BlockType;
+    /** Quarter turns around the vertical axis. Omitted in older scene files. */
+    rotation?: number;
 }
 
 export function isBlockType(value: unknown): value is BlockType {
@@ -155,14 +157,16 @@ export function parseVoxels(data: unknown): VoxelData[] {
     if (!Array.isArray(data)) throw new Error('Expected a voxel array.');
     return data.map(value => {
         if (!value || typeof value !== 'object') throw new Error('Invalid voxel.');
-        const { x, y, z, color, blockType } = value;
+        const { x, y, z, color, blockType, rotation } = value;
         const legacyColor = typeof blockType === 'string' && Object.hasOwn(LEGACY_LIGHT_COLORS, blockType)
             ? LEGACY_LIGHT_COLORS[blockType as keyof typeof LEGACY_LIGHT_COLORS] : undefined;
         if (![x, y, z].every(coordinate => typeof coordinate === 'number' && Number.isFinite(coordinate)) ||
             typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color) ||
-            (blockType !== undefined && !isBlockType(blockType) && !legacyColor)) {
+            (blockType !== undefined && !isBlockType(blockType) && !legacyColor) ||
+            (rotation !== undefined && (!Number.isInteger(rotation) || rotation < 0 || rotation > 3))) {
             throw new Error('Invalid voxel data.');
         }
-        return { x, y, z, color: legacyColor ?? color, blockType: legacyColor ? BlockId.Glow : blockType ?? BlockId.Custom };
+        return { x, y, z, color: legacyColor ?? color, blockType: legacyColor ? BlockId.Glow : blockType ?? BlockId.Custom,
+            ...(rotation !== undefined ? { rotation } : {}) };
     });
 }

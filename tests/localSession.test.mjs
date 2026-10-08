@@ -42,13 +42,24 @@ test('saving an empty scene replaces previous blocks instead of bringing them ba
 
 test('new tool selections and grid visibility persist while older sessions still load', () => {
     const storage = memoryStorage();
-    for (const activeTool of ['paint', 'fill', 'pick', 'box', 'box-erase']) {
+    for (const activeTool of ['paint', 'fill', 'pick', 'box', 'box-erase', 'move', 'rotate']) {
         const session = { ...snapshot, activeTool, showGrid: false };
         saveLocalSession(storage, session);
         assert.deepEqual(readLocalSession(storage), session);
     }
     saveLocalSession(storage, snapshot);
     assert.deepEqual(readLocalSession(storage), snapshot);
+});
+
+test('rotation settings and rotated objects persist in local sessions', () => {
+    const storage = memoryStorage();
+    const session = { ...snapshot, placementRotation: 3, voxels: [{ ...snapshot.voxels[0], rotation: 2 }] };
+    saveLocalSession(storage, session);
+    assert.deepEqual(readLocalSession(storage), session);
+    for (const placementRotation of [-1, 4, .5, '1']) {
+        saveLocalSession(storage, { ...session, placementRotation });
+        assert.equal(readLocalSession(storage), undefined);
+    }
 });
 
 test('official materials and texture variants survive local session restoration', () => {

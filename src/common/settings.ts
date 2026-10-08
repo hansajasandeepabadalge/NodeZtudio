@@ -18,7 +18,7 @@ export const SETTINGS = {
     editor: { tool: ToolId.Select, block: BlockId.Custom, color: '#95704b', glowColor: '#ffad42', showGrid: true, historyLimit: 100 },
     shortcuts: {
         tools: { [ToolId.Select]: 'V', [ToolId.Draw]: 'B', [ToolId.Box]: 'X', [ToolId.BoxErase]: 'C', [ToolId.Paint]: 'P', [ToolId.Erase]: 'E', [ToolId.Fill]: 'F', [ToolId.Pick]: 'I' },
-        grid: 'G', reset: 'R', undo: 'Z', redo: 'Y', save: 'S',
+        grid: 'G', reset: 'R', undo: 'Z', redo: 'Y', save: 'S', rotatePlacement: 'Q',
     },
     lighting: {
         defaults: { automatic: false, time: 12, cycleSeconds: 240, brightness: 1 } satisfies LightingSettings,

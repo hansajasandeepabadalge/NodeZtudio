@@ -1,5 +1,7 @@
 const paths = {
     select: 'M4 3l7 18 3-7 7-3z',
+    rotate: 'M20 7a8 8 0 1 0 1 7M20 3v5h-5',
+    move: 'M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4',
     draw: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
     box: 'M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16',
     'box-erase': 'M4 4h16v16H4zM8 8l8 8M8 16l8-8',

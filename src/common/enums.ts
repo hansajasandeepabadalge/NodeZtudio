@@ -8,6 +8,8 @@ export enum ToolId {
     Erase = 'erase',
     Fill = 'fill',
     Pick = 'pick',
+    Rotate = 'rotate',
+    Move = 'move',
 }
 
 export enum BlockId {
