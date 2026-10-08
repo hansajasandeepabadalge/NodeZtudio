@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SETTINGS } from '@/common/settings';
 import { TextureId } from '@/common/enums';
-import { BLOCK_TEXTURE_URLS, blockFaces, blockEmission, textureSettings, type BlockType, type TextureKind } from '@/features/voxel/blocks';
+import { BLOCK_TEXTURE_URLS, blockFaces, blockEmission, doorTextures, textureSettings, type BlockType, type TextureKind } from '@/features/voxel/blocks';
 
 /** Materials belong to the engine, so deleting one block cannot break its neighbors. */
 export function createBlockMaterials() {
@@ -42,6 +42,11 @@ export function createBlockMaterials() {
 
     return {
         get(type: BlockType, color: string): THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] {
+            const door = doorTextures(type);
+            if (door) return [
+                ...Array(6).fill(door.lower),
+                ...Array(6).fill(door.upper),
+            ].map(texturedMaterial);
             const faces = blockFaces(type);
             if (faces) return faces.map(texturedMaterial);
             const key = `${type}:${color.toLowerCase()}`;

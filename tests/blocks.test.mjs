@@ -17,7 +17,7 @@ registerHooks({
     },
 });
 
-const { BLOCKS, BLOCK_TEXTURE_URLS, MINECRAFT_PACK, isBlockType, blockFaces, blockEmission } = await import('../src/features/voxel/blocks.ts');
+const { BLOCKS, BLOCK_TEXTURE_URLS, MINECRAFT_PACK, isBlockType, blockFaces, blockEmission, isDoor, doorTextures, blockHeight } = await import('../src/features/voxel/blocks.ts');
 const { createVoxelEngine } = await import('../src/features/rendering/voxelEngine.ts');
 const { createBlockMaterials } = await import('../src/features/rendering/blockMaterials.ts');
 const { MAX_BLOCK_LIGHTS } = await import('../src/features/rendering/blockLights.ts');
@@ -74,8 +74,93 @@ function setup(onHistoryChange, onPick) {
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 200 }),
     };
     const engine = createVoxelEngine(scene, camera, dom, '#896344', 'custom', onHistoryChange, onPick);
-    return { engine, scene, listeners };
+    return { engine, scene, listeners, camera };
 }
+
+test('wooden doors combine both textures in a thin two-cell model and erase from the upper half', () => {
+    const { engine, scene, listeners, camera } = setup();
+    try {
+        engine.setMode('draw');
+        engine.setBlockType('minecraft:wooden_door');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        const saved = engine.exportScene();
+        assert.equal(saved.length, 1);
+        const door = scene.children.find(child => child.userData.voxel);
+        door.geometry.computeBoundingBox();
+        const bounds = door.geometry.boundingBox;
+        assert.deepEqual(bounds.getSize(new THREE.Vector3()).toArray(), [1, 2, 3 / 16]);
+        assert.equal(bounds.min.y + door.position.y, 0);
+        assert.equal(bounds.max.y + door.position.y, 2);
+        assert.ok(door.material.slice(0, 6).every(m => m.map.image.src.endsWith('/door_wood_lower.png')));
+        assert.ok(door.material.slice(6).every(m => m.map.image.src.endsWith('/door_wood_upper.png')));
+        assert.ok(door.material[10].alphaTest > 0, 'upper windows must be cut out');
+        camera.up.set(0, 1, 0);
+        camera.position.set(.5, 1.5, 10);
+        camera.lookAt(.5, 1.5, .5);
+        camera.updateMatrixWorld();
+        scene.updateMatrixWorld();
+        engine.setMode('erase');
+        listeners.get('mousedown')({ button: 0, clientX: 106, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), []);
+        engine.undo();
+        assert.deepEqual(engine.exportScene(), saved);
+        engine.redo();
+        assert.deepEqual(engine.exportScene(), []);
+    } finally { engine.dispose(); }
+});
+
+test('door placement respects occupied upper cells and retains the full shape through save/load', () => {
+    const { engine, scene, listeners } = setup();
+    try {
+        engine.importScene([{ x: .5, y: .5, z: .5, color: '#8b6c3e', blockType: 'minecraft:wooden_door' }]);
+        const saved = engine.exportScene();
+        engine.clearScene();
+        engine.importScene(JSON.parse(JSON.stringify(saved)));
+        assert.equal(scene.children.find(child => child.userData.voxel).material.length, 12);
+        // The floor behind the thin panel belongs to the already occupied lower cell.
+        engine.setMode('draw');
+        engine.setBlockType('stone');
+        scene.updateMatrixWorld();
+        listeners.get('mousedown')({ button: 0, clientX: 100, clientY: 100 });
+        assert.deepEqual(engine.exportScene(), saved);
+    } finally { engine.dispose(); }
+});
+
+test('every door and door texture variant has the full shape and its own matching halves', () => {
+    const doors = BLOCKS.filter(block => block.id.includes('door') && !block.id.includes('trapdoor'));
+    const { engine, scene } = setup();
+    try {
+        assert.equal(doors.length, 34);
+        for (const block of doors) {
+            assert.ok(isDoor(block.id), block.id);
+            assert.equal(blockHeight(block.id), 2);
+            const pair = doorTextures(block.id);
+            assert.notEqual(pair.upper, pair.lower);
+            engine.importScene([{ x: .5, y: .5, z: .5, color: block.color, blockType: block.id }]);
+            const mesh = scene.children.find(child => child.userData.voxel);
+            mesh.geometry.computeBoundingBox();
+            assert.deepEqual(mesh.geometry.boundingBox.getSize(new THREE.Vector3()).toArray(), [1, 2, 3 / 16]);
+            assert.ok(mesh.material.slice(0, 6).every(m => m.map.image.src === BLOCK_TEXTURE_URLS[pair.lower]), block.id);
+            assert.ok(mesh.material.slice(6).every(m => m.map.image.src === BLOCK_TEXTURE_URLS[pair.upper]), block.id);
+        }
+        for (const species of ['acacia', 'birch', 'dark_oak', 'iron', 'jungle', 'spruce']) {
+            const pair = { upper: `bedrock:door_${species}_upper`, lower: `bedrock:door_${species}_lower` };
+            assert.deepEqual(doorTextures(`minecraft:${species}_door`), pair);
+            for (const half of ['upper', 'lower']) assert.deepEqual(doorTextures(`minecraft:texture/door_${species}_${half}`), pair);
+        }
+        assert.deepEqual(doorTextures('minecraft:waxed_weathered_copper_door'), {
+            upper: 'bedrock:weathered_copper_door_top', lower: 'bedrock:weathered_copper_door_bottom',
+        });
+        assert.deepEqual(doorTextures('minecraft:warped_door'), {
+            upper: 'bedrock:huge_fungus/warped_door_top', lower: 'bedrock:huge_fungus/warped_door_lower',
+        });
+        for (const block of BLOCKS.filter(block => block.id.includes('trapdoor'))) {
+            assert.equal(isDoor(block.id), false);
+            assert.equal(blockHeight(block.id), 1);
+        }
+    } finally { engine.dispose(); }
+});
 
 test('box build previews two corners and adds an inclusive region as one undo action', () => {
     const { engine, scene, listeners } = setup();

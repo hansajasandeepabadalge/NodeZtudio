@@ -26,13 +26,56 @@ export interface BlockDefinition {
     category: string;
 }
 
+interface DoorTextures {
+    upper: TextureKind;
+    lower: TextureKind;
+}
+
+// The upstream catalog falls back to oak for several older door block IDs.
+const legacyDoorWoods = ['acacia', 'birch', 'dark_oak', 'iron', 'jungle', 'spruce'];
+const doorTexturePairs = new Map<string, DoorTextures>();
+for (const block of BEDROCK_PACK.blocks) {
+    let upper: string;
+    let lower: string;
+    const variant = block.id.match(/^minecraft:texture\/(door_.+)_(upper|lower)$/);
+    const species = block.id.slice('minecraft:'.length).replace(/_door$/, '');
+    if (variant) {
+        upper = `bedrock:${variant[1]}_upper`;
+        lower = `bedrock:${variant[1]}_lower`;
+    } else if (/^minecraft:[\w]+_door$/.test(block.id)) {
+        if (legacyDoorWoods.includes(species)) {
+            upper = `bedrock:door_${species}_upper`;
+            lower = `bedrock:door_${species}_lower`;
+        } else {
+            upper = block.faces[0];
+            lower = block.faces[2];
+        }
+    } else continue;
+    if (Object.hasOwn(BEDROCK_PACK.textures, upper) && Object.hasOwn(BEDROCK_PACK.textures, lower)) {
+        doorTexturePairs.set(block.id, { upper: upper as TextureKind, lower: lower as TextureKind });
+    }
+}
+
+export function doorTextures(type: BlockType) {
+    return doorTexturePairs.get(type);
+}
+
 export const MINECRAFT_PACK = BEDROCK_PACK.pack;
 export const BLOCKS: BlockDefinition[] = [
     ...BUILTIN_BLOCKS.map(block => ({ ...block, category: 'Editor Basics' })),
-    ...BEDROCK_PACK.blocks.map(block => ({ ...block, id: block.id as BlockType })),
+    ...BEDROCK_PACK.blocks.map(block => ({ ...block, id: block.id as BlockType,
+        description: doorTexturePairs.has(block.id) ? `Two-block-tall ${block.label.toLowerCase()} with matching upper and lower textures.` : block.description })),
 ];
 const blockIds = new Set<string>(BLOCKS.map(block => block.id));
 const minecraftFaces = new Map(BEDROCK_PACK.blocks.map(block => [block.id, block.faces]));
+
+export function isDoor(type: BlockType) {
+    return doorTexturePairs.has(type);
+}
+
+export function blockHeight(type: BlockType = BlockId.Custom) {
+    return isDoor(type) ? 2 : 1;
+}
 
 interface PackTexture {
     url: string;

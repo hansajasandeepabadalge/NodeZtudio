@@ -3,7 +3,7 @@
 import { BlockId } from '@/common/enums';
 
 import { memo, useMemo, useState } from 'react';
-import { BLOCKS, BLOCK_TEXTURE_URLS, MINECRAFT_PACK, blockFaces, blockEmission, type BlockType, type TextureKind } from '@/features/voxel/blocks';
+import { BLOCKS, BLOCK_TEXTURE_URLS, MINECRAFT_PACK, blockFaces, blockEmission, doorTextures, textureSettings, type BlockType, type TextureKind } from '@/features/voxel/blocks';
 import { GLASS, TEXT_COLOR } from '@/common/settings';
 
 function Face({ kind, color }: { kind?: TextureKind; color: string }) {
@@ -13,6 +13,19 @@ function Face({ kind, color }: { kind?: TextureKind; color: string }) {
 }
 
 export function BlockPreview({ type, color }: { type: BlockType; color: string }) {
+    const door = doorTextures(type);
+    const doorColor = door ? textureSettings(door.lower)?.color ?? color : color;
+    if (door) return (
+        <svg aria-hidden="true" width="48" height="44" viewBox="0 0 48 44">
+            <g transform="matrix(1 .5 0 1 14 2)">
+                <Face kind={door.upper} color={color} />
+                <g transform="translate(0 16)"><Face kind={door.lower} color={color} /></g>
+            </g>
+            <path d="M30 10l3-1.5v32L30 42z" fill={doorColor} />
+            <path d="M14 2l3-1.5 16 8L30 10z" fill={doorColor} />
+            <path d="M30 10l3-1.5v32L30 42z" fill="#000" opacity=".25" />
+        </svg>
+    );
     const faces = type === BlockId.Custom || type === BlockId.Glow ? undefined : blockFaces(type);
     const emission = blockEmission(type, color);
     return (
@@ -75,7 +88,7 @@ const BlockPicker = memo(function BlockPicker({ id, activeBlock, activeColor, gl
             <select aria-label="Block category" value={category} onChange={event => { setCategory(event.target.value); setPage(0); }} style={{ ...inputStyle, marginTop: 6 }}>
                 {categories.map(value => <option key={value}>{value}</option>)}
             </select>
-            <p style={{ fontSize: 10, opacity: 0.7 }}>Choose a block, then click the grid. Shaped blocks use cube geometry; animated textures show their first frame.</p>
+            <p style={{ fontSize: 10, opacity: 0.7 }}>Choose a block, then click the grid. Doors are two blocks tall; other shaped blocks use cubes. Animated textures show their first frame.</p>
             <div aria-live="polite" style={{ fontSize: 10, opacity: 0.7, marginBottom: 8 }}>{matches.length.toLocaleString()} matches · Page {page + 1} of {pageCount}</div>
                 <div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>

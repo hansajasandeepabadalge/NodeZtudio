@@ -9,8 +9,9 @@ import { ToolId, BlockId } from '@/common/enums';
 
 import * as THREE from 'three';
 import { createBlockMaterials } from './blockMaterials';
+import { createBlockGeometry } from './blockGeometry';
 import { createBlockLights } from './blockLights';
-import { isBlockType, parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
+import { blockHeight, isBlockType, isDoor, parseVoxels, type BlockType, type VoxelData } from '@/features/voxel/blocks';
 import type { Tool } from '@/types/tools';
 import { GRID_SIZE, SETTINGS } from '@/common/settings';
 
@@ -138,7 +139,7 @@ export function createVoxelEngine(
             scene.remove(existing);
             existing.geometry.dispose();
         }
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), blockMaterials.get(blockType, color));
+        const mesh = new THREE.Mesh(createBlockGeometry(blockType), blockMaterials.get(blockType, color));
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.position.set(x, y, z);
@@ -161,6 +162,24 @@ export function createVoxelEngine(
     function voxelAt(key: string): VoxelData | undefined {
         const mesh = voxels.get(key);
         return mesh ? { ...mesh.userData.voxel as VoxelData } : undefined;
+    }
+
+    function canPlace(x: number, y: number, z: number, type: BlockType, ignore?: string) {
+        for (let dy = 0; dy < blockHeight(type); dy++) {
+            const key = cellKey(x, y + dy, z);
+            const below = cellKey(x, y + dy - 1, z);
+            if ((key !== ignore && voxels.has(key)) ||
+                (below !== ignore && isDoor(voxelAt(below)?.blockType ?? BlockId.Custom))) return false;
+        }
+        return true;
+    }
+
+    function previewCell(mesh: THREE.Object3D, edges: THREE.Object3D, cell: THREE.Vector3, type: BlockType) {
+        const door = isDoor(type);
+        mesh.scale.set(1, blockHeight(type), door ? 3 / 16 : 1);
+        edges.scale.copy(mesh.scale);
+        mesh.position.copy(cell).add(new THREE.Vector3(0, door ? .5 : 0, door ? -13 / 32 : 0));
+        edges.position.copy(mesh.position);
     }
 
     function applyChanges(changes: VoxelChange[], direction: 'before' | 'after') {
@@ -237,7 +256,10 @@ export function createVoxelEngine(
         // Snap to grid
         const cellX = Math.floor(pos.x) + 0.5;
         const cellY = Math.floor(pos.y) + 0.5;
-        const cellZ = Math.floor(pos.z) + 0.5;
+        // A thin door face still places neighbors in the adjacent grid cell.
+        const cellZ = !isFloor && isDoor(hit.object.userData.voxel?.blockType) && normal.z !== 0
+            ? hit.object.position.z + Math.sign(normal.z)
+            : Math.floor(pos.z) + 0.5;
 
         let place: THREE.Vector3 | null = null;
         if (Math.abs(cellX) <= HALF_GRID && Math.abs(cellZ) <= HALF_GRID && cellY > 0) {
@@ -257,6 +279,10 @@ export function createVoxelEngine(
             Math.abs(start.z - end.z) + 1,
         );
         const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+        if (currentMode === ToolId.Box && isDoor(currentBlockType)) {
+            size.y += 1;
+            center.y += .5;
+        }
         const mesh = currentMode === ToolId.BoxErase ? eraseHoverMesh : hoverMesh;
         const edges = currentMode === ToolId.BoxErase ? eraseEdgeLines : edgeLines;
         mesh.position.copy(center);
@@ -298,8 +324,7 @@ export function createVoxelEngine(
             edgeLines.visible = false;
             const { hitBlock } = getTargets(event);
             if (hitBlock) {
-                eraseHoverMesh.position.copy(hitBlock);
-                eraseEdgeLines.position.copy(hitBlock);
+                previewCell(eraseHoverMesh, eraseEdgeLines, hitBlock, voxelAt(cellKey(hitBlock.x, hitBlock.y, hitBlock.z))?.blockType ?? BlockId.Custom);
                 eraseHoverMesh.visible = true;
                 eraseEdgeLines.visible = true;
             }
@@ -311,8 +336,7 @@ export function createVoxelEngine(
         if (currentMode !== ToolId.Draw) {
             // Select mode: only show highlight on hit block
             if (hitBlock) {
-                hoverMesh.position.copy(hitBlock);
-                edgeLines.position.copy(hitBlock);
+                previewCell(hoverMesh, edgeLines, hitBlock, voxelAt(cellKey(hitBlock.x, hitBlock.y, hitBlock.z))?.blockType ?? BlockId.Custom);
                 hoverMesh.visible = true;
                 edgeLines.visible = true;
             } else {
@@ -323,7 +347,11 @@ export function createVoxelEngine(
             // Draw mode: only show white border outline at the place target
             hoverMesh.visible = false;
             if (place) {
-                edgeLines.position.copy(place);
+                previewCell(hoverMesh, edgeLines, place, currentBlockType);
+                if (!canPlace(place.x, place.y, place.z, currentBlockType)) {
+                    edgeLines.visible = false;
+                    return;
+                }
                 edgeLines.visible = true;
             } else {
                 edgeLines.visible = false;
@@ -368,15 +396,15 @@ export function createVoxelEngine(
                 // Scan existing cells so empty space in a large box costs no extra work.
                 voxels.forEach((mesh, key) => {
                     const { x, y, z } = mesh.position;
-                    if (x >= min.x && x <= max.x && y >= min.y && y <= max.y && z >= min.z && z <= max.z) {
+                    if (x >= min.x && x <= max.x && y + blockHeight(voxelAt(key)?.blockType) - 1 >= min.y && y <= max.y && z >= min.z && z <= max.z) {
                         changes.push({ key, before: voxelAt(key) });
                     }
                 });
             } else for (let x = min.x; x <= max.x; x++) {
-                for (let y = min.y; y <= max.y; y++) {
+                for (let y = min.y; y <= max.y; y += blockHeight(currentBlockType)) {
                     for (let z = min.z; z <= max.z; z++) {
                         const key = cellKey(x, y, z);
-                        if (!voxels.has(key)) changes.push({ key, after: {
+                        if (canPlace(x, y, z, currentBlockType)) changes.push({ key, after: {
                             x, y, z, color: currentColor, blockType: currentBlockType,
                         } });
                     }
@@ -397,6 +425,7 @@ export function createVoxelEngine(
                 return;
             }
             if (currentMode === ToolId.Paint) {
+                if (!canPlace(source.x, source.y, source.z, currentBlockType, key)) return;
                 commit([{ key, before: source, after: { ...source, color: currentColor, blockType: currentBlockType } }]);
             } else {
                 const queue = [key];
@@ -405,6 +434,7 @@ export function createVoxelEngine(
                 for (let index = 0; index < queue.length; index++) {
                     const voxel = voxelAt(queue[index]);
                     if (!voxel || voxel.blockType !== source.blockType || voxel.color.toLowerCase() !== source.color.toLowerCase()) continue;
+                    if (!canPlace(voxel.x, voxel.y, voxel.z, currentBlockType, queue[index])) continue;
                     changes.push({ key: queue[index], before: voxel, after: { ...voxel, color: currentColor, blockType: currentBlockType } });
                     for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
                         const neighbor = cellKey(voxel.x + dx, voxel.y + dy, voxel.z + dz);
@@ -437,7 +467,7 @@ export function createVoxelEngine(
 
         if (event.button === 0) {
             // Left click = Place block
-            if (place) {
+            if (place && canPlace(place.x, place.y, place.z, currentBlockType)) {
                 const key = cellKey(place.x, place.y, place.z);
                 commit([{ key, before: voxelAt(key), after: {
                     x: place.x, y: place.y, z: place.z, color: currentColor, blockType: currentBlockType,
